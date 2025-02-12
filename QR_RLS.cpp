@@ -173,7 +173,8 @@ void QR_Rls::downdate()
     double tolerance = 1e-10;
     for (int i = 0; i < dim * dim; ++i)
     {
-        if (fabs(temp[i] - I[i]) < tolerance)
+        double je = fabs(temp[i] - I[i]);
+        if (fabs(temp[i] - I[i]) > tolerance)
         {
             bool_st = 0;
             break;

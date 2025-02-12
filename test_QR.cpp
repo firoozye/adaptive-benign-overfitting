@@ -116,13 +116,6 @@ int main()
     vector<double> preds;
     vector<double> mse;
 
-    double testi[D];
-    for (int i = 0; i < D; ++i)
-    {
-        testi[i] = X[i * num_rows]; // C-style column-major order
-    }
-    double je = qr_rls.pred(testi);
-
     double X_update[D];
 
     int n_its = 1000;
