@@ -1,0 +1,81 @@
+.
+├── abo_predict
+├── clean
+├── data
+│   ├── daily_vix.csv
+│   └── matrix.csv
+├── include
+│   ├── add_row_col.h
+│   ├── gau_rff.h
+│   ├── last_row_givens.h
+│   ├── logger.h
+│   ├── main.h
+│   ├── main_noeigen.h
+│   ├── pseudo_inverse.h
+│   ├── QR_decomposition.h
+│   ├── QR_RLS.h
+│   ├── read_csv_func.h
+│   ├── test.h
+│   └── test_QR.h
+├── libs
+│   ├── eigen
+│   └── lapack
+├── makefile
+├── makefile_old
+├── makeout.log
+├── makeout.txt
+├── notebooks
+│   ├── gau_rff_python.py
+│   └── weight_scipy_comp.ipynb
+├── obj
+│   ├── add_row_col.o
+│   ├── gau_rff.o
+│   ├── last_row_givens.o
+│   ├── main.o
+│   ├── pseudo_inverse.o
+│   ├── QR_decomposition.o
+│   ├── QR_RLS.o
+│   └── read_csv_func.o
+├── OneDrive
+│   └── Documents
+│       └── double_descent_project_C++
+│           ├── daily_vix.csv
+│           ├── gau_rff.cpp
+│           ├── gau_rff.h
+│           ├── gau_rff_python.py
+│           ├── last_row_givens.cpp
+│           ├── libs
+│           │   ├── eigen
+│           │   └── lapack
+│           ├── matrix.csv
+│           ├── pseudo_inverse.cpp
+│           ├── __pycache__
+│           │   └── gau_rff_python.cpython-310.pyc
+│           ├── QR_decomposition.cpp
+│           ├── QR_RLS.cpp
+│           ├── QR_RLS.h
+│           ├── read_csv_func.cpp
+│           ├── test.cpp
+│           ├── test_QR
+│           ├── test_QR.cpp
+│           └── weight_scipy_comp.ipynb
+├── __pycache__
+│   └── gau_rff_python.cpython-310.pyc
+├── src
+│   ├── add_row_col.cpp
+│   ├── convertEigenNative.cc
+│   ├── gau_rff.cpp
+│   ├── last_row_givens.cpp
+│   ├── main.cc
+│   ├── main_noeigen.cc
+│   ├── pseudo_inverse.cpp
+│   ├── QR_decomposition.cpp
+│   ├── QR_RLS.cpp
+│   ├── read_csv_func.cpp
+│   ├── test.cpp
+│   └── test_QR.cpp
+├── tags
+├── test_QR
+└── tree.out
+
+17 directories, 62 files

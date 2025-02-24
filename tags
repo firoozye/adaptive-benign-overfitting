@@ -1,0 +1,53 @@
+$(OBJ_DIR)/%.o	makefile	/^$(OBJ_DIR)\/%.o: $(SRC_DIR)\/%.cc $(HEADERS)$/;"	t	line:79	language:Make
+$(OBJ_DIR)/%.o	makefile	/^$(OBJ_DIR)\/%.o: $(SRC_DIR)\/%.cpp $(HEADERS)$/;"	t	line:87	language:Make
+$(TARGET)	makefile	/^$(TARGET): $(OBJECTS)$/;"	t	line:72	language:Make
+CXX	makefile	/^CXX = g++$/;"	m	line:2	language:Make
+CXXFLAGS	makefile	/^CXXFLAGS = -std=c++17 $(INCLUDES) -DHAVE_LAPACK_CONFIG_H -DLAPACK_COMPLEX_STRUCTURE  -DLOG_LEVEL/;"	m	line:25	language:Make
+DATA_DIR	makefile	/^DATA_DIR := $(ROOT_DIR)\/data$/;"	m	line:10	language:Make
+EIGEN_PATH	makefile	/^EIGEN_PATH = \/usr\/include\/eigen3$/;"	m	line:13	language:Make
+G	include/QR_RLS.h	/^   double *G;       \/\/ Givens rotation matrix$/;"	m	line:42	language:C++	class:QR_Rls	typeref:typename:double *	access:public
+HEADERS	makefile	/^HEADERS = $(INC_DIR)\/QR_RLS.h \\$/;"	m	line:56	language:Make
+I	include/QR_RLS.h	/^   double *I;       \/\/ Identity matrix$/;"	m	line:46	language:C++	class:QR_Rls	typeref:typename:double *	access:public
+INCLUDES	makefile	/^INCLUDES = -I$(INC_DIR) -I\/usr\/include -I\/usr\/include\/eigen3 -I\/usr\/lib\/lapack$/;"	m	line:23	language:Make
+INC_DIR	makefile	/^INC_DIR := $(ROOT_DIR)\/include$/;"	m	line:9	language:Make
+LAPACK_PATH	makefile	/^LAPACK_PATH = \/usr\/lib\/lapack$/;"	m	line:14	language:Make
+LIBS	makefile	/^LIBS = -L$(LIB_DIR) -llapacke -lopenblas -lgfortran -lm$/;"	m	line:19	language:Make
+LIB_DIR	makefile	/^LIB_DIR = \/usr\/lib$/;"	m	line:15	language:Make
+OBJECTS	makefile	/^OBJECTS = $(patsubst $(SRC_DIR)\/%.cc,$(OBJ_DIR)\/%.o,$(patsubst $(SRC_DIR)\/%.cpp,$(OBJ_DIR)\/%/;"	m	line:60	language:Make
+OBJ_DIR	makefile	/^OBJ_DIR := $(ROOT_DIR)\/obj$/;"	m	line:8	language:Make
+QR_Rls	include/QR_RLS.h	/^class QR_Rls {$/;"	c	line:28	language:C++
+QR_Rls	src/QR_RLS.cpp	/^QR_Rls::QR_Rls(double *x, double *y, int max_obs, double ff, double l, int dim, int n_batch)$/;"	f	line:17	language:C++	class:QR_Rls	signature:(double * x,double * y,int max_obs,double ff,double l,int dim,int n_batch)
+Q_R_compute	src/QR_decomposition.cpp	/^std::pair<double *, double *> Q_R_compute(QR_Rls *qr_rls, double *A, int m, int n) {$/;"	f	line:3	language:C++	typeref:typename:std::pair<double *,double * >	signature:(QR_Rls * qr_rls,double * A,int m,int n)
+R	include/QR_RLS.h	/^   double *R;       \/\/ R matrix from QR decomposition$/;"	m	line:43	language:C++	class:QR_Rls	typeref:typename:double *	access:public
+ROOT_DIR	makefile	/^ROOT_DIR := .$/;"	m	line:6	language:Make
+R_inv	include/QR_RLS.h	/^   double *R_inv;   \/\/ Inverse of R matrix$/;"	m	line:44	language:C++	class:QR_Rls	typeref:typename:double *	access:public
+SOURCES	makefile	/^SOURCES = $(SRC_DIR)\/main.cc \\$/;"	m	line:46	language:Make
+SRC_DIR	makefile	/^SRC_DIR := $(ROOT_DIR)\/src$/;"	m	line:7	language:Make
+TARGET	makefile	/^TARGET = $(ROOT_DIR)\/abo_predict$/;"	m	line:63	language:Make
+X	include/QR_RLS.h	/^   double *X;  \/\/ Input matrix$/;"	m	line:38	language:C++	class:QR_Rls	typeref:typename:double *	access:public
+X_rows	include/QR_RLS.h	/^   int X_rows;    \/\/ Number of rows in X matrix$/;"	m	line:53	language:C++	class:QR_Rls	typeref:typename:int	access:public
+all	makefile	/^all: $(TARGET)$/;"	t	line:69	language:Make
+all_Q	include/QR_RLS.h	/^   double *all_Q;   \/\/ Q matrix from QR decomposition$/;"	m	line:45	language:C++	class:QR_Rls	typeref:typename:double *	access:public
+b	include/QR_RLS.h	/^   double b;      \/\/ Beta parameter$/;"	m	line:60	language:C++	class:QR_Rls	typeref:typename:double	access:public
+clean	makefile	/^clean:$/;"	t	line:95	language:Make
+dim	include/QR_RLS.h	/^   int dim;       \/\/ Dimension of input$/;"	m	line:58	language:C++	class:QR_Rls	typeref:typename:int	access:public
+downdate	src/QR_RLS.cpp	/^void QR_Rls::downdate() {$/;"	f	line:191	language:C++	class:QR_Rls	typeref:typename:void	signature:()
+downdate	src/last_row_givens.cpp	/^void downdate(QR_Rls *qr_rls) {$/;"	f	line:56	language:C++	namespace:givens	typeref:typename:void	signature:(QR_Rls * qr_rls)
+ff	include/QR_RLS.h	/^   double ff;     \/\/ Forgetting factor$/;"	m	line:59	language:C++	class:QR_Rls	typeref:typename:double	access:public
+givens	include/last_row_givens.h	/^namespace givens {$/;"	n	line:23	language:C++
+givens	src/last_row_givens.cpp	/^namespace givens {$/;"	n	line:11	language:C++	file:
+i	include/QR_RLS.h	/^   int i;         \/\/ Iterator$/;"	m	line:61	language:C++	class:QR_Rls	typeref:typename:int	access:public
+l	include/QR_RLS.h	/^   double l;      \/\/ Lambda parameter$/;"	m	line:55	language:C++	class:QR_Rls	typeref:typename:double	access:public
+max_obs	include/QR_RLS.h	/^   int max_obs;   \/\/ Maximum number of observations$/;"	m	line:52	language:C++	class:QR_Rls	typeref:typename:int	access:public
+n_batch	include/QR_RLS.h	/^   int n_batch;   \/\/ Initial batch size$/;"	m	line:56	language:C++	class:QR_Rls	typeref:typename:int	access:public
+n_obs	include/QR_RLS.h	/^   int n_obs;     \/\/ Current number of observations$/;"	m	line:57	language:C++	class:QR_Rls	typeref:typename:int	access:public
+pred	src/QR_RLS.cpp	/^double QR_Rls::pred(double *x) {$/;"	f	line:321	language:C++	class:QR_Rls	typeref:typename:double	signature:(double * x)
+print-%	makefile	/^print-%:$/;"	t	line:99	language:Make
+r_c_size	include/QR_RLS.h	/^   int r_c_size;  \/\/ Size of R and C matrices$/;"	m	line:54	language:C++	class:QR_Rls	typeref:typename:int	access:public
+temp_z	include/QR_RLS.h	/^   double *temp_z;  \/\/ Temporary vector for calculations$/;"	m	line:49	language:C++	class:QR_Rls	typeref:typename:double *	access:public
+update	src/QR_RLS.cpp	/^void QR_Rls::update(double *new_x, double &new_y) {$/;"	f	line:81	language:C++	class:QR_Rls	typeref:typename:void	signature:(double * new_x,double & new_y)
+update	src/last_row_givens.cpp	/^void update(QR_Rls *qr_rls) {$/;"	f	line:12	language:C++	namespace:givens	typeref:typename:void	signature:(QR_Rls * qr_rls)
+w	include/QR_RLS.h	/^   double *w;       \/\/ Weight vector$/;"	m	line:48	language:C++	class:QR_Rls	typeref:typename:double *	access:public
+y	include/QR_RLS.h	/^   double *y;  \/\/ Target vector$/;"	m	line:39	language:C++	class:QR_Rls	typeref:typename:double *	access:public
+z	include/QR_RLS.h	/^   double *z;       \/\/ Intermediate vector$/;"	m	line:47	language:C++	class:QR_Rls	typeref:typename:double *	access:public
+~QR_Rls	src/QR_RLS.cpp	/^QR_Rls::~QR_Rls() {$/;"	f	line:5	language:C++	class:QR_Rls	signature:()
