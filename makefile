@@ -22,7 +22,7 @@ LIBS = -L$(LIB_DIR) -llapacke -lopenblas -lgfortran -lm
 ##INCLUDES = -I$(INC_DIR) I/usr/include -I$(EIGEN_PATH) -I$(LAPACK_PATH)
 INCLUDES = -I$(INC_DIR) -I/usr/include -I/usr/include/eigen3 -I/usr/lib/lapack
 
-CXXFLAGS = -std=c++17 $(INCLUDES) -DHAVE_LAPACK_CONFIG_H -DLAPACK_COMPLEX_STRUCTURE  -DLOG_LEVEL=3
+CXXFLAGS = -std=c++17 $(INCLUDES) -DHAVE_LAPACK_CONFIG_H -DLAPACK_COMPLEX_STRUCTURE  -DLOG_LEVEL=$(if $(LOG_LEVEL),$(LOG_LEVEL),3)
 
 CXXFLAGS += -Wall 
 CXXFLAGS += -Wno-shadow                # Suppress variable shadowing warnings
@@ -99,4 +99,11 @@ clean:
 print-%:
 	@echo $* = $($*)
 
-.PHONY: all clean print-%
+# Debug build with symbols and verbose logging
+debug: CXXFLAGS += $(DEBUGFLAGS)
+debug: LOG_LEVEL = 4
+debug: all
+	@echo "Debug build complete with LOG_LEVEL=4 and debug symbols enabled"
+	@echo "Run with: gdb $(TARGET)"
+
+.PHONY: all clean print-% debug

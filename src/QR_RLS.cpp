@@ -79,7 +79,8 @@ QR_Rls::QR_Rls(double *x, double *y, int max_obs, double ff, double l, int dim, 
 
 // Update method
 void QR_Rls::update(double *new_x, double &new_y) {
-   LOG_INFO("QR_Rls update called");
+   LOG_INFO("QR_Rls::update start");
+   LOG_DEBUG("New data size new_x :" << sizeof(new_x) << " new_y: " << sizeof(new_y));
    X = addRowColMajor(X, n_obs, dim);
    for (int i = 0; i < dim; ++i) {
       X[(i + 1) * n_obs + i] = new_x[i];
@@ -193,8 +194,10 @@ void QR_Rls::downdate() {
    // Check the condition
    double *temp = new double[dim * dim];
    // A.transpose() * P.transpose()
+   LOG_DEBUG("downdate just before cblas call");
    cblas_dgemm(CblasColMajor, CblasTrans, CblasTrans,
                dim, dim, n_obs, 1, R, n_obs, R_inv, dim, 0, temp, dim);
+   LOG_DEBUG("downdate just after cblas call");
    bool bool_st = true;
    double tolerance = 1e-10;
    for (int i = 0; i < dim * dim; ++i) {
@@ -208,24 +211,35 @@ void QR_Rls::downdate() {
 
    // Update matrices
    // G will be allocated in givens_downdate
-   if (G != nullptr) {
-      delete[] G;
-      G = nullptr;
-   }
+   LOG_DEBUG("G pointer  Not deletign: " << G);
+   LOG_DEBUG(" G != nullptr? : " << (G != nullptr));
+   // if (G != nullptr) {
+   //    delete[] G;
+   //    G = nullptr;
+   // }
+   LOG_DEBUG("downdate just before givens::downdate call");
    givens::downdate(this);
+   LOG_DEBUG("downdate just after givens::downdate call, G pointer: " << G);
+   LOG_DEBUG("downdate just after givens::downdate call");
 
+   LOG_DEBUG("downdate just before second cblas call");
    double *result = new double[r_c_size];
    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
                dim, n_obs, n_obs, 1, R_inv, dim, G, n_obs, 0, result, dim);
+   LOG_DEBUG("downdate just after second cblas call");
    std::memcpy(R_inv, result, n_obs * dim * sizeof(double));
 
+   LOG_DEBUG("downdate just before third cblas call");
    cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans,
                n_obs, dim, n_obs, 1, G, n_obs, R, n_obs, 0, result, n_obs);
    std::memcpy(R, result, n_obs * dim * sizeof(double));
+   LOG_DEBUG("downdate just after third cblas call");
 
+   LOG_DEBUG("downdate just before memory deallocation");
    delete[] result;  // Free memory
-   delete[] G;
-
+   // G will be deleted at the end of downdate
+   //  remotve the delete[] G since we do it down below as well!
+   LOG_DEBUG("G pointer before x_T allocation: " << G);
    double *x_T = new double[dim];
    for (int i = 0; i < dim; ++i) {
       x_T[i] = R[n_obs * i];  // Copy the first row
@@ -236,8 +250,14 @@ void QR_Rls::downdate() {
 
    // Deletion for new regime
    if (!bool_st) {
+      // Safety check for allocation size
+      if (dim <= 0 || dim > 1E+5) {  // adjust maximum as needed
+         LOG_ERROR("Invalid dimension for allocation: " << dim);
+         throw std::runtime_error("Invalid dimension in downdate");
+      }
       double *k = new double[dim];
       double *h = new double[n_obs];
+      LOG_DEBUG("downdate just before fourth and fifth cblas call");
       cblas_dgemv(CblasColMajor, CblasNoTrans,
                   dim, n_obs, 1.0, R_inv, dim, c, 1, 0.0, k, 1);
       cblas_dgemv(CblasColMajor, CblasTrans,
@@ -249,6 +269,7 @@ void QR_Rls::downdate() {
       pinv(h, h_inv, 1, n_obs);
 
       double *temp_vec = new double[n_obs];
+      LOG_DEBUG("downdate just before sixth cblas call");
       cblas_dgemv(CblasColMajor, CblasTrans,
                   dim, n_obs, 1.0, R_inv, dim, k_inv, 1, 0.0, temp_vec, 1);
       double s = cblas_ddot(n_obs, temp_vec, 1, h_inv, 1);
@@ -256,9 +277,12 @@ void QR_Rls::downdate() {
       // 1
       double *k_k_inv = new double[dim * dim]();
       double *R_inv_temp = new double[dim * n_obs];
+      LOG_DEBUG("downdate just before seventh and eighth cblas call");
       cblas_dger(CblasColMajor, dim, dim, 1.0, k, 1, k_inv, 1, k_k_inv, dim);
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
                   dim, n_obs, dim, 1.0, k_k_inv, dim, R_inv, dim, 0.0, R_inv_temp, dim);
+
+      LOG_DEBUG("downdate just before memory deallocation");
       delete[] k_k_inv;
       delete[] k;
       delete[] h;
@@ -269,6 +293,7 @@ void QR_Rls::downdate() {
 
       // 2
       double P_h_inv[dim];
+      LOG_DEBUG("downdate just before ninth and tenth and eleventh cblas call");
       cblas_dgemv(CblasColMajor, CblasNoTrans,
                   dim, n_obs, 1.0, R_inv, dim, h_inv, 1, 0.0, P_h_inv, 1);
       cblas_dger(CblasColMajor, dim, n_obs, -1.0, P_h_inv, 1, h, 1, R_inv, dim);
@@ -296,6 +321,7 @@ void QR_Rls::downdate() {
       //  double sigma_2 = h_mag * u_mag + S * S;
       //  P = P + (1 / S) * P * h.transpose() * u.transpose() - (S / sigma_2) * p_2 * q_2;
    }
+   LOG_DEBUG("downdate just before deleteRows ");
 
    R = deleteRowColMajor(R, n_obs, dim);
    R_inv = deleteColColMajor(R_inv, dim, n_obs);
@@ -308,6 +334,7 @@ void QR_Rls::downdate() {
    n_obs--;
    r_c_size = n_obs * dim;
 
+   LOG_DEBUG("downdate just before cblas call");
    cblas_dgemv(CblasColMajor, CblasTrans, n_obs, n_obs, 1.0, all_Q, n_obs, y, 1, 0.0, z, 1);
    cblas_dgemv(CblasColMajor, CblasNoTrans, dim, n_obs, 1.0, R_inv, dim, z, 1, 0.0, w, 1);
 
@@ -315,6 +342,11 @@ void QR_Rls::downdate() {
    // Cleanup
    delete[] x_T;
    delete[] c;
+   LOG_DEBUG("G pointer before final deletion: " << G);
+   if (G != nullptr) {
+      delete[] G;
+      G = nullptr;
+   }
    LOG_INFO("QR_Rls downdate finished");
 }
 
