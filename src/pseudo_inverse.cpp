@@ -1,6 +1,7 @@
 #include "pseudo_inverse.h"
 
-int pinv(double *A, double *P, const int int_m, const int int_n, double tolerance) {
+int pinv(double *A, double *P, const int int_m, const int int_n, double tolerance)
+{
    // Sample matrix
 
    // it has to be a C array
@@ -18,17 +19,21 @@ int pinv(double *A, double *P, const int int_m, const int int_n, double toleranc
    bool row_vec = int_m == int_m * int_n;
    bool col_vec = int_n == int_m * int_n;
 
-   if (row_vec || col_vec) {
+   if (row_vec || col_vec)
+   {
       double norm;
-      if (row_vec) {
+      if (row_vec)
+      {
          norm = LAPACKE_dlange(LAPACK_COL_MAJOR, 'F', m, n, A_copy, m);
-      } else {
+      }
+      else
+      {
          norm = LAPACKE_dlange(LAPACK_COL_MAJOR, 'F', n, m, A_copy, n);
       }
       int vec_size = int_m * int_n;
-      double chch[vec_size];
 
-      for (int i = 0; i < vec_size; i++) {
+      for (int i = 0; i < vec_size; i++)
+      {
          P[i] = A_copy[i] / (norm * norm);
       }
 
@@ -46,20 +51,25 @@ int pinv(double *A, double *P, const int int_m, const int int_n, double toleranc
    double maxS = *std::max_element(s, s + m);
    double val = atol + maxS * rtol;
    int rank = 0;
-   for (int i = 0; i < m; ++i) {
+   for (int i = 0; i < m; ++i)
+   {
       if (s[i] > val)
          rank++;
    }
 
-   for (int j = 0; j < rank; ++j) {
-      for (int i = 0; i < m; ++i) {
+   for (int j = 0; j < rank; ++j)
+   {
+      for (int i = 0; i < m; ++i)
+      {
          u[j * m + i] /= s[j];
       }
    }
 
    double sub_vt[rank * n];
-   for (int j = 0; j < n; ++j) {
-      for (int i = 0; i < rank; ++i) {
+   for (int j = 0; j < n; ++j)
+   {
+      for (int i = 0; i < rank; ++i)
+      {
          sub_vt[j * rank + i] = vt[j * n + i];
       }
    }

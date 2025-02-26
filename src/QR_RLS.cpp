@@ -2,7 +2,8 @@
 
 using namespace std;
 
-QR_Rls::~QR_Rls() {
+QR_Rls::~QR_Rls()
+{
    LOG_INFO("QR_Rls destructor called");
    delete[] R;
    delete[] R_inv;
@@ -15,8 +16,8 @@ QR_Rls::~QR_Rls() {
 }
 
 QR_Rls::QR_Rls(double *x, double *y, int max_obs, double ff, double l, int dim, int n_batch)
-    : X(x), y(y),  // input data
-                   // matrices for QR decomposition
+    : X(x), y(y), // input data
+                  // matrices for QR decomposition
       G(nullptr),
       R(nullptr),
       R_inv(nullptr),
@@ -35,20 +36,24 @@ QR_Rls::QR_Rls(double *x, double *y, int max_obs, double ff, double l, int dim, 
       dim(dim),
       ff(sqrt(ff)),
       b(1),
-      i(1) {
+      i(1)
+{
    // too much in the construtor! It should just set thing not make all sorts of calculations!
    LOG_INFO("QR_Rls constructor called with dim: " << dim << " and n_batch: " << n_batch);
    I = new double[dim * dim]();
-   for (int idx = 0; idx < dim; idx++) {
+   for (int idx = 0; idx < dim; idx++)
+   {
       I[idx * dim + idx] = 1;
    }
 
    // Forgetting factor matrix
    double *B = new double[dim * dim];
-   for (int i = 0; i < dim * dim; i++) {
+   for (int i = 0; i < dim * dim; i++)
+   {
       B[i] = 0.0;
    }
-   for (int i = 0; i < dim; i++) {
+   for (int i = 0; i < dim; i++)
+   {
       B[i * dim + i] = pow(ff, dim - i - 1);
    }
 
@@ -78,11 +83,13 @@ QR_Rls::QR_Rls(double *x, double *y, int max_obs, double ff, double l, int dim, 
 }
 
 // Update method
-void QR_Rls::update(double *new_x, double &new_y) {
+void QR_Rls::update(double *new_x, double &new_y)
+{
    LOG_INFO("QR_Rls::update start");
    LOG_DEBUG("New data size new_x :" << sizeof(new_x) << " new_y: " << sizeof(new_y));
    X = addRowColMajor(X, n_obs, dim);
-   for (int i = 0; i < dim; ++i) {
+   for (int i = 0; i < dim; ++i)
+   {
       X[(i + 1) * n_obs + i] = new_x[i];
    }
 
@@ -91,7 +98,8 @@ void QR_Rls::update(double *new_x, double &new_y) {
    y[n_obs] = new_y;
    z[n_obs] = new_y;
 
-   for (int i = 0; i < r_c_size; ++i) {
+   for (int i = 0; i < r_c_size; ++i)
+   {
       R_inv[i] *= (1.0 / ff);
       R[i] *= ff;
    }
@@ -112,26 +120,31 @@ void QR_Rls::update(double *new_x, double &new_y) {
 
    double tolerance = 1e-10;
    int is_non_zero = 0;
-   for (int i = 0; i < dim; i++) {
-      if (fabs(c[i]) > tolerance) {
+   for (int i = 0; i < dim; i++)
+   {
+      if (fabs(c[i]) > tolerance)
+      {
          is_non_zero = 1;
          break;
       }
    }
 
    // Update for new regime
-   if (is_non_zero) {
+   if (is_non_zero)
+   {
       double *c_inv = new double[dim];
       pinv(c, c_inv, dim, 1);
       cblas_dger(CblasColMajor, dim, n_obs, -1.0, c_inv, 1, d, 1, R_inv, dim);
       R_inv = addColColMajor(R_inv, dim, n_obs);
 
-      for (int i = 0; i < dim; ++i) {
+      for (int i = 0; i < dim; ++i)
+      {
          R_inv[n_obs * dim + i] = c_inv[i];
       }
    }
    // Update for old regime
-   else {
+   else
+   {
       // VectorXd b_k = (1.0 / (1.0 + d.dot(d))) * P * d.transpose();
       // P = MatrixXd::Zero(P.rows(), P.cols() + 1);
       // P.leftCols(P.cols() - 1) = P - b_k * d.transpose();
@@ -140,7 +153,8 @@ void QR_Rls::update(double *new_x, double &new_y) {
 
    R = addRowColMajor(R, n_obs, dim);
 
-   for (int i = 0; i < dim; ++i) {
+   for (int i = 0; i < dim; ++i)
+   {
       R[(i + 1) * n_obs + i] = new_x[i];
    }
 
@@ -150,13 +164,15 @@ void QR_Rls::update(double *new_x, double &new_y) {
    n_obs++;
 
    // Reallocate temp_z for the new size
-   if (temp_z != nullptr) {
+   if (temp_z != nullptr)
+   {
       delete[] temp_z;
    }
    temp_z = new double[n_obs];
 
    // G will be allocated in givens_update
-   if (G != nullptr) {
+   if (G != nullptr)
+   {
       delete[] G;
       G = nullptr;
    }
@@ -183,13 +199,15 @@ void QR_Rls::update(double *new_x, double &new_y) {
 
    delete[] G;
 
-   if (n_obs > max_obs) {
+   if (n_obs > max_obs)
+   {
       downdate();
    }
    LOG_INFO("QR_Rls update finished");
 }
 
-void QR_Rls::downdate() {
+void QR_Rls::downdate()
+{
    LOG_INFO("QR_Rls downdate called");
    // Check the condition
    double *temp = new double[dim * dim];
@@ -200,8 +218,10 @@ void QR_Rls::downdate() {
    LOG_DEBUG("downdate just after cblas call");
    bool bool_st = true;
    double tolerance = 1e-10;
-   for (int i = 0; i < dim * dim; ++i) {
-      if (fabs(temp[i] - I[i]) > tolerance) {
+   for (int i = 0; i < dim * dim; ++i)
+   {
+      if (fabs(temp[i] - I[i]) > tolerance)
+      {
          bool_st = 0;
          break;
       }
@@ -236,22 +256,25 @@ void QR_Rls::downdate() {
    LOG_DEBUG("downdate just after third cblas call");
 
    LOG_DEBUG("downdate just before memory deallocation");
-   delete[] result;  // Free memory
+   delete[] result; // Free memory
    // G will be deleted at the end of downdate
    //  remotve the delete[] G since we do it down below as well!
    LOG_DEBUG("G pointer before x_T allocation: " << G);
    double *x_T = new double[dim];
-   for (int i = 0; i < dim; ++i) {
-      x_T[i] = R[n_obs * i];  // Copy the first row
+   for (int i = 0; i < dim; ++i)
+   {
+      x_T[i] = R[n_obs * i]; // Copy the first row
    }
 
-   double *c = new double[n_obs]();  // () initializes to zero
+   double *c = new double[n_obs](); // () initializes to zero
    c[0] = 1.0;
 
    // Deletion for new regime
-   if (!bool_st) {
+   if (!bool_st)
+   {
       // Safety check for allocation size
-      if (dim <= 0 || dim > 1E+5) {  // adjust maximum as needed
+      if (dim <= 0 || dim > 1E+5)
+      { // adjust maximum as needed
          LOG_ERROR("Invalid dimension for allocation: " << dim);
          throw std::runtime_error("Invalid dimension in downdate");
       }
@@ -284,12 +307,8 @@ void QR_Rls::downdate() {
 
       LOG_DEBUG("downdate just before memory deallocation");
       delete[] k_k_inv;
-      delete[] k;
-      delete[] h;
       delete[] k_inv;
-      delete[] h_inv;
       delete[] temp_vec;
-      delete[] R_inv_temp;
 
       // 2
       double P_h_inv[dim];
@@ -300,12 +319,19 @@ void QR_Rls::downdate() {
       // 3
       cblas_dger(CblasColMajor, dim, n_obs, s, k, 1, h, 1, R_inv, dim);
 
-      for (int i = 0; i < dim * n_obs; ++i) {
+      for (int i = 0; i < dim * n_obs; ++i)
+      {
          R_inv[i] -= R_inv_temp[i];
       }
+
+      delete[] R_inv_temp;
+      delete[] h_inv;
+      delete[] h;
+      delete[] k;
    }
    // Deletion for old regime
-   else {
+   else
+   {
       // VectorXd x_neg_T = -x_T;
       // VectorXd h = x_neg_T * P;
       // VectorXd u = (MatrixXld::Identity(P.cols(), P.cols()) - A * P) * c;
@@ -343,14 +369,16 @@ void QR_Rls::downdate() {
    delete[] x_T;
    delete[] c;
    LOG_DEBUG("G pointer before final deletion: " << G);
-   if (G != nullptr) {
+   if (G != nullptr)
+   {
       delete[] G;
       G = nullptr;
    }
    LOG_INFO("QR_Rls downdate finished");
 }
 
-double QR_Rls::pred(double *x) {
+double QR_Rls::pred(double *x)
+{
    // cout << w << endl;
    // if (x.rows() == 1)
    //{

@@ -105,5 +105,3 @@ debug: LOG_LEVEL = 4
 debug: all
 	@echo "Debug build complete with LOG_LEVEL=4 and debug symbols enabled"
 	@echo "Run with: gdb $(TARGET)"
-
-.PHONY: all clean print-% debug
