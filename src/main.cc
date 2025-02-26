@@ -4,7 +4,7 @@ int main()
 {
    // Example parameters
    int feature_dim = 14; // Number of features
-   int rff_dim = 1000;   // Random Fourier Feature dimension
+   int rff_dim = 4000;   // Random Fourier Feature dimension
    double kernel_var = 1.0;
    int roll_window = 100;
    double forgetting_factor = 1.0;

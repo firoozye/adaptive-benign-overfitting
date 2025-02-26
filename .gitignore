@@ -1,3 +1,7 @@
 abo_predict
 *.o
 obj/*.o
+
+# Ignore logs and temp files
+*.log
+*.tmp
