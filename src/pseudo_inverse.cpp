@@ -14,7 +14,6 @@ int pinv(double *A, double *P, const int int_m, const int int_n, double toleranc
    // Dimensions
    lapack_int m = int_m, n = int_n, lda = m;
    lapack_int ldu = m, ldvt = n;
-   lapack_int info;
 
    bool row_vec = int_m == int_m * int_n;
    bool col_vec = int_n == int_m * int_n;
@@ -40,18 +39,20 @@ int pinv(double *A, double *P, const int int_m, const int int_n, double toleranc
       return 0;
    }
 
-   double *s = new double[n];
+   int min_mn = std::min(m, n);
+   double *s = new double[min_mn];
    double *u = new double[ldu * m];
    double *vt = new double[ldvt * n];
+   lapack_int info;
    info = LAPACKE_dgesdd(LAPACK_COL_MAJOR, 'A', m, n, A_copy, lda, s, u, ldu, vt, ldvt);
    double atol = 0.0;
    double rtol = std::max<double>(m, n) * std::numeric_limits<double>::epsilon();
 
    // Find rank based on singular values
-   double maxS = *std::max_element(s, s + m);
+   double maxS = *std::max_element(s, s + min_mn);
    double val = atol + maxS * rtol;
    int rank = 0;
-   for (int i = 0; i < m; ++i)
+   for (int i = 0; i < min_mn; ++i)
    {
       if (s[i] > val)
          rank++;
@@ -65,6 +66,7 @@ int pinv(double *A, double *P, const int int_m, const int int_n, double toleranc
       }
    }
 
+   // rank = m;
    double sub_vt[rank * n];
    for (int j = 0; j < n; ++j)
    {
@@ -76,6 +78,16 @@ int pinv(double *A, double *P, const int int_m, const int int_n, double toleranc
 
    cblas_dgemm(CblasColMajor, CblasTrans, CblasTrans,
                n, m, rank, 1.0, sub_vt, rank, u, m, 0.0, P, n);
+
+   double tol = 1e-12;
+
+   for (int i = 0; i < m * n; ++i)
+   {
+      if (fabs(P[i]) < tol)
+      {
+         P[i] = 0;
+      }
+   }
 
    delete[] s;
    delete[] vt;

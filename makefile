@@ -15,93 +15,80 @@ LAPACK_PATH = /usr/lib/lapack
 LIB_DIR = /usr/lib
 
 # Libraries
-##LIBS = -L$(LIB_DIR)  -llapacke -llapack -lblas -lcblas -lgfortran -lm
 LIBS = -L$(LIB_DIR) -llapacke -lopenblas -lgfortran -lm
 
-# Include paths - both project and external
-##INCLUDES = -I$(INC_DIR) I/usr/include -I$(EIGEN_PATH) -I$(LAPACK_PATH)
+# Include paths
 INCLUDES = -I$(INC_DIR) -I/usr/include -I/usr/include/eigen3 -I/usr/lib/lapack
 
-CXXFLAGS = -std=c++17 $(INCLUDES) -DHAVE_LAPACK_CONFIG_H -DLAPACK_COMPLEX_STRUCTURE  -DLOG_LEVEL=$(if $(LOG_LEVEL),$(LOG_LEVEL),3)
+CXXFLAGS = -std=c++17 $(INCLUDES) -DHAVE_LAPACK_CONFIG_H -DLAPACK_COMPLEX_STRUCTURE -DLOG_LEVEL=$(if $(LOG_LEVEL),$(LOG_LEVEL),3)
 
 CXXFLAGS += -Wall 
-CXXFLAGS += -Wno-shadow                # Suppress variable shadowing warnings
-CXXFLAGS += -Wno-unused-parameter      # Suppress unused parameter warnings
-CXXFLAGS += -Wno-sign-compare         # Suppress signed/unsigned comparison warnings
-CXXFLAGS += -Wno-unused-variable      # Suppress unused variable warnings
-CXXFLAGS += -Wno-reorder              # Suppress member initialization reorder warnings
-CXXFLAGS += -Wno-comment              # Suppress comment warnings
-CXXFLAGS += -Wno-deprecated-declarations # Suppress deprecated declaration warnings
-# Add debug flags if DEBUG is set
+CXXFLAGS += -Wno-shadow -Wno-unused-parameter -Wno-sign-compare -Wno-unused-variable -Wno-reorder -Wno-comment -Wno-deprecated-declarations
+
 ifdef DEBUG
     CXXFLAGS += $(DEBUGFLAGS)
 endif
 
-# Source files (with full paths)
-#SOURCES = $(SRC_DIR)/main.cc \
-#         $(SRC_DIR)/gau_rff.cpp \
-#         $(SRC_DIR)/QR_RLS.cpp \
-#         $(SRC_DIR)/read_csv_func.cpp
-# Source files (with full paths)
-SOURCES = $(SRC_DIR)/main.cc \
-          $(SRC_DIR)/QR_RLS.cpp \
-          $(SRC_DIR)/QR_decomposition.cpp \
-          $(SRC_DIR)/pseudo_inverse.cpp \
-          $(SRC_DIR)/last_row_givens.cpp \
-          $(SRC_DIR)/add_row_col.cpp \
-          $(SRC_DIR)/gau_rff.cpp \
-          $(SRC_DIR)/read_csv_func.cpp
+# Define executables
+EXECUTABLES = abo_predict dd_test
 
-# Headers (now in include directory)
-HEADERS = $(INC_DIR)/QR_RLS.h \
-          $(INC_DIR)/gau_rff.h
+# Define sources for each executable
+abo_predict_SOURCES = $(SRC_DIR)/main.cc $(SRC_DIR)/QR_RLS.cpp $(SRC_DIR)/QR_decomposition.cpp \
+                      $(SRC_DIR)/pseudo_inverse.cpp $(SRC_DIR)/last_row_givens.cpp \
+                      $(SRC_DIR)/add_row_col.cpp $(SRC_DIR)/gau_rff.cpp $(SRC_DIR)/read_csv_func.cpp
 
-# Generate object file names in obj directory
-OBJECTS = $(patsubst $(SRC_DIR)/%.cc,$(OBJ_DIR)/%.o,$(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SOURCES)))
+dd_test_SOURCES = $(SRC_DIR)/double_descent_test/dd_test.cc $(SRC_DIR)/QR_RLS.cpp $(SRC_DIR)/QR_decomposition.cpp \
+                      $(SRC_DIR)/pseudo_inverse.cpp $(SRC_DIR)/last_row_givens.cpp \
+                      $(SRC_DIR)/add_row_col.cpp $(SRC_DIR)/gau_rff.cpp $(SRC_DIR)/read_csv_func.cpp
 
-# Target executable in root directory
-TARGET = $(ROOT_DIR)/abo_predict
+
+# Generate object files
+abo_predict_OBJECTS = $(patsubst $(SRC_DIR)/%.cc,$(OBJ_DIR)/%.o,$(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(abo_predict_SOURCES)))
+dd_test_OBJECTS = $(patsubst $(SRC_DIR)/%.cc,$(OBJ_DIR)/%.o,$(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(dd_test_SOURCES)))
 
 # Ensure build directories exist
-$(shell mkdir -p $(OBJ_DIR))
+#$(shell mkdir -p $(OBJ_DIR))
+$(shell mkdir -p $(OBJ_DIR) $(OBJ_DIR)/double_descent_test)
 
-# Build rules
-all: $(TARGET)
+# Default target: Build all executables
+all: $(EXECUTABLES)
 
-# Link object files to create executable
-$(TARGET): $(OBJECTS)
-	@echo "Linking object files..."
-	@echo "CXXFLAGS: $(CXXFLAGS)"
-	$(CXX) $(CXXFLAGS) $(OBJECTS) -o $(TARGET) $(LIBS)
-	@echo "Build successful!"
+# Build each executable
+abo_predict: $(abo_predict_OBJECTS)
+	@echo "Linking $@..."
+	$(CXX) $(CXXFLAGS) $(abo_predict_OBJECTS) -o $@ $(LIBS)
+	@echo "Build successful: $@"
+
+dd_test: $(dd_test_OBJECTS)
+	@echo "Linking $@..."
+	$(CXX) $(CXXFLAGS) $(dd_test_OBJECTS) -o $@ $(LIBS)
+	@echo "Build successful: $@"
 
 # Compile .cc files
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cc $(HEADERS)
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cc
 	@echo "Compiling CC $<..."
-	@echo "INCLUDES: $(INCLUDES)"
-	@echo "CXXFLAGS: $(CXXFLAGS)"
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 	@echo "Compiled $< successfully!"
 
+$(OBJ_DIR)/double_descent_test/%.o: $(SRC_DIR)/double_descent_test/%.cc
+	@echo "Compiling CC $<..."
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+	@echo "Compiled $< successfully!"
+
+
 # Compile .cpp files
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(HEADERS)
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@echo "Compiling CPP $<..."
-	@echo "INCLUDES: $(INCLUDES)"
-	@echo "CXXFLAGS: $(CXXFLAGS)"
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 	@echo "Compiled $< successfully!"
 
 # Clean rule
 clean:
-	rm -f $(OBJ_DIR)/*.o $(TARGET)
+	rm -f $(OBJ_DIR)/*.o $(EXECUTABLES)
 
-# Print variables for debugging
-print-%:
-	@echo $* = $($*)
-
-# Debug build with symbols and verbose logging
+# Debug build
 debug: CXXFLAGS += $(DEBUGFLAGS)
 debug: LOG_LEVEL = 4
 debug: all
-	@echo "Debug build complete with LOG_LEVEL=4 and debug symbols enabled"
-	@echo "Run with: gdb $(TARGET)"
+#debug: dd_test
+	@echo "Debug build complete"

@@ -5,7 +5,8 @@
       "name": "Debug with GDB",
       "type": "cppdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/abo_predict", // Path to your executable
+      //"program": "${workspaceFolder}/abo_predict", // Path to your executable
+      "program": "${workspaceFolder}/dd_test",
       "args": [], // Command-line arguments
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",

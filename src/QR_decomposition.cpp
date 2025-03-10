@@ -6,8 +6,13 @@ std::pair<double *, double *> Q_R_compute(QR_Rls *qr_rls, double *A, int m, int 
    int info;
 
    // Allocate memory for Q and R
-   double *Q = new double[m * m];      // Q is m x m
-   double *R_temp = new double[m * n]; // R is m x n
+   double *Q = new double[m * m]();      // Q is m x m
+   double *R_temp = new double[m * n](); // R is m x n
+
+   for (int idx = 0; idx < m; idx++)
+   {
+      Q[idx * m + idx] = 1;
+   }
 
    // Create a copy of A for QR decomposition
    double A_copy[m * n];
@@ -50,21 +55,37 @@ std::pair<double *, double *> Q_R_compute(QR_Rls *qr_rls, double *A, int m, int 
       }
    }
 
-   // Generate Q matrix using ORGQR
-   info = LAPACKE_dorgqr(LAPACK_COL_MAJOR, m, m, k, A_copy, m, tau);
-
-   if (info != 0)
-   {
-      throw std::runtime_error("LAPACKE_dorgqr failed");
-   }
-
    // Copy Q into all_Q
-   for (int i = 0; i < m; i++)
+   if (m <= n)
    {
-      for (int j = 0; j < m; j++)
+      int ldm = m;
+      info = LAPACKE_dorgqr(LAPACK_COL_MAJOR, m, ldm, k, A_copy, m, tau);
+
+      if (info != 0)
       {
-         Q[j * m + i] = A_copy[j * m + i];
+         throw std::runtime_error("LAPACKE_dorgqr failed");
       }
+
+      for (int i = 0; i < ldm; i++)
+      {
+         for (int j = 0; j < ldm; j++)
+         {
+            Q[j * ldm + i] = A_copy[j * ldm + i];
+         }
+      }
+   }
+   else
+   {
+      int ldm = n;
+      std::memcpy(Q, A_copy, m * n * sizeof(double));
+      info = LAPACKE_dorgqr(LAPACK_COL_MAJOR, m, ldm, k, Q, m, tau);
+
+      if (info != 0)
+      {
+         throw std::runtime_error("LAPACKE_dorgqr failed");
+      }
+
+      info = LAPACKE_dormqr(LAPACK_COL_MAJOR, 'L', 'N', m, m - n, n, A_copy, m, tau, Q + n * m, m);
    }
 
    return {Q, R_temp};
