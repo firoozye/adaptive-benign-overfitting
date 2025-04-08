@@ -7,6 +7,7 @@
       "request": "launch",
       //"program": "${workspaceFolder}/abo_predict", // Path to your executable
       "program": "${workspaceFolder}/dd_test",
+      //"program": "${workspaceFolder}/dd_test_lags_ewm",
       "args": [], // Command-line arguments
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",

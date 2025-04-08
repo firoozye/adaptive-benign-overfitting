@@ -8,7 +8,8 @@ int pinv(double *A, double *P, const int int_m, const int int_n, double toleranc
    // LDA The leading dimension of array A
    // LDU The leading dimension of the array U
 
-   double A_copy[int_m * int_n];
+   // double A_copy[int_m * int_n];
+   double *A_copy = new double[int_m * int_n];
    std::memcpy(A_copy, A, int_m * int_n * sizeof(double));
 
    // Dimensions
@@ -36,6 +37,7 @@ int pinv(double *A, double *P, const int int_m, const int int_n, double toleranc
          P[i] = A_copy[i] / (norm * norm);
       }
 
+      delete[] A_copy;
       return 0;
    }
 
@@ -89,6 +91,7 @@ int pinv(double *A, double *P, const int int_m, const int int_n, double toleranc
       }
    }
 
+   delete[] A_copy;
    delete[] s;
    delete[] vt;
    delete[] u;

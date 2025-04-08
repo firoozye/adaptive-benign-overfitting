@@ -37,7 +37,7 @@ abo_predict_SOURCES = $(SRC_DIR)/main.cc $(SRC_DIR)/QR_RLS.cpp $(SRC_DIR)/QR_dec
                       $(SRC_DIR)/pseudo_inverse.cpp $(SRC_DIR)/last_row_givens.cpp \
                       $(SRC_DIR)/add_row_col.cpp $(SRC_DIR)/gau_rff.cpp $(SRC_DIR)/read_csv_func.cpp
 
-dd_test_SOURCES = $(SRC_DIR)/double_descent_test/dd_test.cc $(SRC_DIR)/QR_RLS.cpp $(SRC_DIR)/QR_decomposition.cpp \
+dd_test_SOURCES = $(SRC_DIR)/double_descent_test/dd_test_lags_ewm.cc $(SRC_DIR)/QR_RLS.cpp $(SRC_DIR)/QR_decomposition.cpp \
                       $(SRC_DIR)/pseudo_inverse.cpp $(SRC_DIR)/last_row_givens.cpp \
                       $(SRC_DIR)/add_row_col.cpp $(SRC_DIR)/gau_rff.cpp $(SRC_DIR)/read_csv_func.cpp
 
