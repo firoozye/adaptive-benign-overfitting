@@ -1,8 +1,8 @@
-[submodule "OneDrive/Documents/double_descent_project_C++/libs/eigen"]
-	path = OneDrive/Documents/double_descent_project_C++/libs/eigen
+[submodule "libs/eigen"]
+	path = libs/eigen
 	url = https://gitlab.com/libeigen/eigen.git
-[submodule "OneDrive/Documents/double_descent_project_C++/libs/lapack"]
-	path = OneDrive/Documents/double_descent_project_C++/libs/lapack
+[submodule "libs/lapack"]
+	path = libs/lapack
 	url = https://github.com/Reference-LAPACK/lapack.git
 [submodule "libs/benchmark"]
 	path = libs/benchmark
