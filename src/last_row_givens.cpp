@@ -32,10 +32,10 @@ namespace givens
       for (int j = 0; j < limit; ++j)
       {
 
-         dlartg_(&R[j * row_stride + j * col_stride], &R[(n_obs - 1) * row_stride + j * col_stride], &c, &s, &r);
+         dlartg_(&R[j * row_stride + j * col_stride], &R[(col_stride - 1) * row_stride + j * col_stride], &c, &s, &r);
 
          R[j * row_stride + j * col_stride] = r;
-         R[(n_obs - 1) * row_stride + j * col_stride] = 0;
+         R[(col_stride - 1) * row_stride + j * col_stride] = 0;
 
          int temp = dim - j - 1;
          int idx_1 = j * row_stride + (j + 1) * col_stride;
@@ -82,8 +82,6 @@ namespace givens
          int idx_2 = i * col_stride;
 
          dlartg_(&all_Q[idx_1], &all_Q[idx_2], &c, &s, &r);
-
-         // Update W
 
          all_Q[idx_1] = r;
          all_Q[idx_2] = 0;

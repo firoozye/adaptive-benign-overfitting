@@ -4,3 +4,5 @@
 [submodule "OneDrive/Documents/double_descent_project_C++/libs/lapack"]
 	path = OneDrive/Documents/double_descent_project_C++/libs/lapack
 	url = https://github.com/Reference-LAPACK/lapack.git
+[submodule "libs/benchmark"]
+	path = libs/benchmark

@@ -1,7 +1,8 @@
 #pragma once
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
 #include <cblas.h>
@@ -20,7 +21,8 @@ extern "C" {
 #include "QR_RLS.h"
 
 class QR_Rls;
-namespace givens {
-void update(QR_Rls *qr_rls);
-void downdate(QR_Rls *qr_rls);
-}  // namespace givens
+namespace givens
+{
+    void update(QR_Rls *qr_rls);
+    void downdate(QR_Rls *qr_rls);
+} // namespace givens
