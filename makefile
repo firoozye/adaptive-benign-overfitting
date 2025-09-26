@@ -1,94 +1,122 @@
-# Compiler settings
-CXX = g++
-DEBUGFLAGS = -g -DEIGEN_INITIALIZE_MATRICES_BY_ZERO
-
-# Directory paths
-ROOT_DIR := .
-SRC_DIR := $(ROOT_DIR)/src
-OBJ_DIR := $(ROOT_DIR)/obj
-INC_DIR := $(ROOT_DIR)/include
-DATA_DIR := $(ROOT_DIR)/data
-
-# External library paths
-EIGEN_PATH = /usr/include/eigen3
-LAPACK_PATH = /usr/lib/lapack
-LIB_DIR = /usr/lib
-
-# Libraries
-LIBS = -L$(LIB_DIR) -llapacke -lopenblas -lgfortran -lm
-
-# Include paths
+# --- Toolchain ---------------------------------------------------------------
+CXX       ?= g++
+CPPFLAGS  ?= -Iinclude -MMD -MP                          # preprocessor flags (includes + dep gen)
+#CPPFLAGS  ?= -Iinclude -Ilibs/eigen -MMD -MP
 INCLUDES = -I$(INC_DIR) -I/usr/include -I/usr/include/eigen3 -I/usr/lib/lapack
-
-CXXFLAGS = -std=c++17 $(INCLUDES) -DHAVE_LAPACK_CONFIG_H -DLAPACK_COMPLEX_STRUCTURE -DLOG_LEVEL=$(if $(LOG_LEVEL),$(LOG_LEVEL),3)
-
-CXXFLAGS += -Wall 
-CXXFLAGS += -Wno-shadow -Wno-unused-parameter -Wno-sign-compare -Wno-unused-variable -Wno-reorder -Wno-comment -Wno-deprecated-declarations
-
+CXXFLAGS = -std=c++17 $(INCLUDES) -DHAVE_LAPACK_CONFIG_H -DLAPACK_COMPLEX_STRUCTURE \
+			-Wall -Wno-shadow \
+			-Wno-unused-parameter -Wno-sign-compare -Wno-unused-variable \
+			-Wno-reorder -Wno-comment -Wno-deprecated-declarations
+LDFLAGS   ?= -Llibs/lib
+LDLIBS    ?= -lopenblas -llapacke -lgfortran -lm
+DEBUGFLAGS = -g -DEIGEN_INITIALIZE_MATRICES_BY_ZERO
+# enable with: `make DEBUG=1`
 ifdef DEBUG
-    CXXFLAGS += $(DEBUGFLAGS)
+  CXXFLAGS += $(DEBUGFLAGS) -DLOG_LEVEL=4
+else
+  CXXFLAGS += -DLOG_LEVEL=3
 endif
 
-# Define executables
-EXECUTABLES = abo_predict dd_test
+# --- Google Benchmark (submodule) -------------------------------------------
+BENCH_DIR     := libs/benchmark
+BENCH_INC     := $(BENCH_DIR)/include
+BENCH_LIBDIR  := $(BENCH_DIR)/build/src
+BENCH_AR      := $(BENCH_LIBDIR)/libbenchmark.a
 
-# Define sources for each executable
-abo_predict_SOURCES = $(SRC_DIR)/main.cc $(SRC_DIR)/QR_RLS.cpp $(SRC_DIR)/QR_decomposition.cpp \
-                      $(SRC_DIR)/pseudo_inverse.cpp $(SRC_DIR)/last_row_givens.cpp \
-                      $(SRC_DIR)/add_row_col.cpp $(SRC_DIR)/gau_rff.cpp $(SRC_DIR)/read_csv_func.cpp
+# Benchmark-only flags (kept out of normal targets)
+BENCH_CPPFLAGS := -I$(BENCH_INC)
+BENCH_LDFLAGS  := -L$(BENCH_LIBDIR)
+BENCH_LDLIBS   := -lbenchmark -lpthread
 
-dd_test_SOURCES = $(SRC_DIR)/double_descent_test/dd_test_lags_ewm.cc $(SRC_DIR)/QR_RLS.cpp $(SRC_DIR)/QR_decomposition.cpp \
-                      $(SRC_DIR)/pseudo_inverse.cpp $(SRC_DIR)/last_row_givens.cpp \
-                      $(SRC_DIR)/add_row_col.cpp $(SRC_DIR)/gau_rff.cpp $(SRC_DIR)/read_csv_func.cpp
+# Auto-build libbenchmark.a if missing
+$(BENCH_AR):
+	@echo "[benchmark] configuring…"
+	@cmake -S $(BENCH_DIR) -B $(BENCH_DIR)/build \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBENCHMARK_ENABLE_TESTING=OFF \
+		-DBENCHMARK_DOWNLOAD_DEPENDENCIES=ON
+	@echo "[benchmark] building…"
+	@cmake --build $(BENCH_DIR)/build -j
 
 
-# Generate object files
-abo_predict_OBJECTS = $(patsubst $(SRC_DIR)/%.cc,$(OBJ_DIR)/%.o,$(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(abo_predict_SOURCES)))
-dd_test_OBJECTS = $(patsubst $(SRC_DIR)/%.cc,$(OBJ_DIR)/%.o,$(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(dd_test_SOURCES)))
+# --- Layout ------------------------------------------------------------------
+SRC_DIR := src
+OBJ_DIR := obj
 
-# Ensure build directories exist
-#$(shell mkdir -p $(OBJ_DIR))
-$(shell mkdir -p $(OBJ_DIR) $(OBJ_DIR)/double_descent_test)
+# Common sources shared by all executables
+COMMON_SRCS := \
+  $(SRC_DIR)/QR_RLS.cpp \
+  $(SRC_DIR)/QR_decomposition.cpp \
+  $(SRC_DIR)/pseudo_inverse.cpp \
+  $(SRC_DIR)/last_row_givens.cpp \
+  $(SRC_DIR)/add_row_col.cpp \
+  $(SRC_DIR)/gau_rff.cpp \
+  $(SRC_DIR)/read_csv_func.cpp
 
-# Default target: Build all executables
-all: $(EXECUTABLES)
+# Per-target main files
+dd_test_MAIN     := $(SRC_DIR)/double_descent_test/dd_test_non_linear.cc
+timing_test_MAIN := $(SRC_DIR)/timing_test/timing_test_non_linear_ts.cc
 
-# Build each executable
-abo_predict: $(abo_predict_OBJECTS)
-	@echo "Linking $@..."
-	$(CXX) $(CXXFLAGS) $(abo_predict_OBJECTS) -o $@ $(LIBS)
+# Targets
+PROGS := dd_test timing_test
+
+# Helper: turn a list of .cc/.cpp under SRC_DIR into objs under OBJ_DIR (mirrors tree)
+make-objs = $(patsubst $(SRC_DIR)/%.cc,$(OBJ_DIR)/%.o, \
+            $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(1)))
+
+# Define per-target sources/objects
+
+dd_test_SRCS     := $(dd_test_MAIN)     $(COMMON_SRCS)
+timing_test_SRCS := $(timing_test_MAIN) $(COMMON_SRCS)
+
+dd_test_OBJS     := $(call make-objs,$(dd_test_SRCS))
+timing_test_OBJS := $(call make-objs,$(timing_test_SRCS))
+
+$(timing_test_OBJS): CPPFLAGS += $(BENCH_CPPFLAGS)
+
+# --- Default -----------------------------------------------------------------
+.PHONY: all
+all: $(PROGS)
+
+# --- Link rules --------------------------------------------------------------
+
+dd_test: $(dd_test_OBJS)
+	@echo "Linking $@…"
+	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
+	@echo "Build successful: $@"
+	
+timing_test: $(BENCH_AR) $(timing_test_OBJS)
+	@echo "Linking $@ as benchmark…"
+	$(CXX) $(LDFLAGS) $(BENCH_LDFLAGS) $(timing_test_OBJS) $(LDLIBS) $(BENCH_LDLIBS) -o $@
 	@echo "Build successful: $@"
 
-dd_test: $(dd_test_OBJECTS)
-	@echo "Linking $@..."
-	$(CXX) $(CXXFLAGS) $(dd_test_OBJECTS) -o $@ $(LIBS)
-	@echo "Build successful: $@"
-
-# Compile .cc files
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cc
-	@echo "Compiling CC $<..."
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-	@echo "Compiled $< successfully!"
-
-$(OBJ_DIR)/double_descent_test/%.o: $(SRC_DIR)/double_descent_test/%.cc
-	@echo "Compiling CC $<..."
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-	@echo "Compiled $< successfully!"
-
-
-# Compile .cpp files
+# --- Compile rules (auto-mkdir + deps) --------------------------------------
+# .cpp
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
-	@echo "Compiling CPP $<..."
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	@mkdir -p $(@D)
+	@echo "Compiling CPP $<…"
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 	@echo "Compiled $< successfully!"
 
-# Clean rule
-clean:
-	rm -f $(OBJ_DIR)/*.o $(EXECUTABLES)
+# .cc
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cc
+	@mkdir -p $(@D)
+	@echo "Compiling CC  $<…"
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
+	@echo "Compiled $< successfully!"
 
-# Debug build
-debug: CXXFLAGS += $(DEBUGFLAGS)
-debug: LOG_LEVEL = 4
-debug: all
-#debug: dd_test
-	@echo "Debug build complete"
+# --- Utilities ---------------------------------------------------------------
+.PHONY: clean debug
+clean:
+	$(RM) -r $(OBJ_DIR) $(PROGS)
+
+.PHONY: debug
+debug:
+	$(MAKE) clean
+	$(MAKE) all DEBUG=1
+
+# Include auto-generated dependency files
+DEPS := $(dd_test_OBJS:.o=.d) $(timing_test_OBJS:.o=.d)
+-include $(DEPS)
+
+

@@ -83,8 +83,8 @@ QR_Rls::QR_Rls(double *x_input, double *y_input, int max_obs, double ff, double 
 // Update method
 void QR_Rls::update(double *new_x, double &new_y)
 {
-   LOG_INFO("QR_Rls::update start");
-   LOG_DEBUG("New data size new_x :" << sizeof(new_x) << " new_y: " << sizeof(new_y));
+   // LOG_INFO("QR_Rls::update start");
+   // LOG_DEBUG("New data size new_x :" << sizeof(new_x) << " new_y: " << sizeof(new_y));
    X = addRowColMajor(X, n_obs, dim);
    for (int i = 0; i < dim; ++i)
    {
@@ -165,6 +165,7 @@ void QR_Rls::update(double *new_x, double &new_y)
                dim, n_obs, 1.0, R_inv, dim, z, 1, 0.0, w, 1);
 
    r_c_size = n_obs * dim;
+
    double *P_copy = new double[r_c_size];
    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
                dim, n_obs, n_obs, 1.0, R_inv, dim, G, n_obs, 0.0, P_copy, dim);
@@ -197,15 +198,15 @@ void QR_Rls::downdate()
 
    // Update matrices
    givens::downdate(this);
-   LOG_DEBUG("downdate just after givens::downdate call");
-   LOG_DEBUG("downdate just before second cblas call");
+   // LOG_DEBUG("downdate just after givens::downdate call");
+   // LOG_DEBUG("downdate just before second cblas call");
    double *result = new double[r_c_size];
    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
                dim, n_obs, n_obs, 1, R_inv, dim, G, n_obs, 0, result, dim);
-   LOG_DEBUG("downdate just after second cblas call");
+   // LOG_DEBUG("downdate just after second cblas call");
    std::memcpy(R_inv, result, n_obs * dim * sizeof(double));
 
-   LOG_DEBUG("downdate just before third cblas call");
+   // LOG_DEBUG("downdate just before third cblas call");
    cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans,
                n_obs, dim, n_obs, 1, G, n_obs, R, n_obs, 0, result, n_obs);
    std::memcpy(R, result, n_obs * dim * sizeof(double));

@@ -1,7 +1,8 @@
 #pragma once
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
 #include <lapacke.h>
@@ -21,4 +22,4 @@ extern "C" {
 class QR_Rls;
 
 // Function declaration only in header
-std::pair<double*, double*> Q_R_compute(QR_Rls* qr_rls, double* A, int m, int n);
+std::pair<double *, double *> Q_R_compute(QR_Rls *qr_rls, double *A, int m, int n);

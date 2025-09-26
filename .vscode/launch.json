@@ -6,8 +6,9 @@
       "type": "cppdbg",
       "request": "launch",
       //"program": "${workspaceFolder}/abo_predict", // Path to your executable
+      //"program": "${workspaceFolder}/dd_test",
       "program": "${workspaceFolder}/dd_test",
-      //"program": "${workspaceFolder}/dd_test_lags_ewm",
+      //"program": "${workspaceFolder}/timing_test",
       "args": [], // Command-line arguments
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",

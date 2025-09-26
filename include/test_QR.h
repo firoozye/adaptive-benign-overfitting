@@ -10,4 +10,3 @@
 using namespace std;
 
 Eigen::MatrixXd lag_matrix(const std::vector<double> &x, int lag);
-int main();

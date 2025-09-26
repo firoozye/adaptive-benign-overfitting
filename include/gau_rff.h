@@ -5,12 +5,13 @@
 
 using namespace std;
 
-class GaussianRFF {
+class GaussianRFF
+{
 public:
    Eigen::MatrixXd A;
    Eigen::RowVectorXd b;
    int D;
-   mutable std::mt19937 rng;  // Random number generator
+   mutable std::mt19937 rng; // Random number generator
 
    GaussianRFF(int d, int D, double kernel_var, bool seed);
    Eigen::MatrixXd transform_matrix(const Eigen::MatrixXd &x);

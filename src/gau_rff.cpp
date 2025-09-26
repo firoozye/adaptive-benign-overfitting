@@ -20,7 +20,6 @@ GaussianRFF::GaussianRFF(int d, int D, double kernel_var, bool seed)
 
     // Initialize A and b matrices
     A = Eigen::MatrixXd(d, D);
-    // b = Eigen::VectorXd(D);
     b = Eigen::RowVectorXd(D);
 
     // Fill A with samples from the normal distribution
@@ -33,7 +32,6 @@ GaussianRFF::GaussianRFF(int d, int D, double kernel_var, bool seed)
     }
 
     // Fill b with samples from the uniform distribution
-    // for (int j = 0; j < D; ++j)
     for (int j = 0; j < D; ++j)
     {
         b(j) = uniform_dist(rng);
@@ -43,9 +41,7 @@ GaussianRFF::GaussianRFF(int d, int D, double kernel_var, bool seed)
 Eigen::MatrixXd GaussianRFF::transform_matrix(const Eigen::MatrixXd &x)
 {
 
-    // Eigen::MatrixXd b_mat(A.cols(), x.cols());
     Eigen::MatrixXd b_mat(x.rows(), A.cols());
-
     for (int j = 0; j < x.rows(); ++j)
     {
         b_mat.row(j) = b;

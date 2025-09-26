@@ -4,4 +4,3 @@
 #include "read_csv_func.h"
 
 using namespace std;
-int main();

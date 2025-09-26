@@ -2,13 +2,7 @@
 
 int pinv(double *A, double *P, const int int_m, const int int_n, double tolerance)
 {
-   // Sample matrix
 
-   // it has to be a C array
-   // LDA The leading dimension of array A
-   // LDU The leading dimension of the array U
-
-   // double A_copy[int_m * int_n];
    double *A_copy = new double[int_m * int_n];
    std::memcpy(A_copy, A, int_m * int_n * sizeof(double));
 
@@ -45,8 +39,7 @@ int pinv(double *A, double *P, const int int_m, const int int_n, double toleranc
    double *s = new double[min_mn];
    double *u = new double[ldu * m];
    double *vt = new double[ldvt * n];
-   lapack_int info;
-   info = LAPACKE_dgesdd(LAPACK_COL_MAJOR, 'A', m, n, A_copy, lda, s, u, ldu, vt, ldvt);
+   LAPACKE_dgesdd(LAPACK_COL_MAJOR, 'A', m, n, A_copy, lda, s, u, ldu, vt, ldvt);
    double atol = 0.0;
    double rtol = std::max<double>(m, n) * std::numeric_limits<double>::epsilon();
 
@@ -68,7 +61,6 @@ int pinv(double *A, double *P, const int int_m, const int int_n, double toleranc
       }
    }
 
-   // rank = m;
    double sub_vt[rank * n];
    for (int j = 0; j < n; ++j)
    {
