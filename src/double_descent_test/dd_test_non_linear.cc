@@ -126,10 +126,10 @@ int main()
             X_update[i] = X_update_old(0, i);
          }
 
-         preds.push_back(qr_rls.pred(X_update));
+         // preds.push_back(qr_rls.pred(X_update));
          qr_rls.update(X_update, y_update[i]);
 
-         // preds.push_back(qr_rls.pred(X_update));
+         preds.push_back(qr_rls.pred(X_update));
          mse.push_back(pow(preds[i] - y_update[i], 2));
          all_mse += pow(preds[i] - y_update[i], 2);
       }

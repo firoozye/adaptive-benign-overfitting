@@ -185,6 +185,15 @@ void QR_Rls::update(double *new_x, double &new_y)
       G = nullptr;
    }
 
+   double sol_R_inv[n_obs * dim];
+   double sol_R[n_obs * dim];
+   for (i = 0; i < n_obs * dim; i++)
+   {
+      sol_R_inv[i] = R_inv[i];
+      sol_R[i] = R[i];
+      // sol_R_inv[i] = 0;
+   }
+
    if (n_obs > max_obs)
    {
       downdate();
@@ -201,12 +210,12 @@ void QR_Rls::downdate()
    // LOG_DEBUG("downdate just after givens::downdate call");
    // LOG_DEBUG("downdate just before second cblas call");
    double *result = new double[r_c_size];
-   cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
-               dim, n_obs, n_obs, 1, R_inv, dim, G, n_obs, 0, result, dim);
-   // LOG_DEBUG("downdate just after second cblas call");
-   std::memcpy(R_inv, result, n_obs * dim * sizeof(double));
+   // cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
+   //             dim, n_obs, n_obs, 1, R_inv, dim, G, n_obs, 0, result, dim);
+   //  LOG_DEBUG("downdate just after second cblas call");
+   // std::memcpy(R_inv, result, n_obs * dim * sizeof(double));
 
-   // LOG_DEBUG("downdate just before third cblas call");
+   LOG_DEBUG("downdate just before third cblas call");
    cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans,
                n_obs, dim, n_obs, 1, G, n_obs, R, n_obs, 0, result, n_obs);
    std::memcpy(R, result, n_obs * dim * sizeof(double));
@@ -218,11 +227,26 @@ void QR_Rls::downdate()
    double x_T[dim];
    for (int i = 0; i < dim; ++i)
    {
-      x_T[i] = R[n_obs * i]; // Copy the first row=
+      // x_T[i] = R[n_obs * i]; // Copy the first row=
+      x_T[i] = X[n_obs * i]; // Copy the first row=
+   }
+
+   double tempi_x_T[dim];
+   for (int i = 0; i < dim; ++i)
+   {
+      tempi_x_T[i] = X[n_obs * i]; // Copy the first row=
+   }
+
+   double jjee = 0;
+   for (i = 0; i < n_obs * dim; i++)
+   {
+      jjee += abs(x_T[i] - tempi_x_T[i]);
    }
 
    double c[n_obs] = {0}; // initializes to zero
    c[0] = 1.0;
+
+   double R_inv_pepin[dim * dim];
 
    // Deletion for new regime
    if (n_obs < dim)
@@ -286,58 +310,26 @@ void QR_Rls::downdate()
          x_neg_T[i] = -1 * x_T[i];
       }
 
-      double h[n_obs];
-      cblas_dgemv(CblasColMajor, CblasTrans,
-                  dim, n_obs, 1.0, R_inv, dim, x_neg_T, 1, 0.0, h, 1);
-
-      double k[dim];
-      cblas_dgemv(CblasColMajor, CblasNoTrans, dim, n_obs,
-                  1.0, R_inv, dim, c, 1, 0.0, k, 1);
-
-      double u[n_obs];
-      double I_R_P[n_obs * n_obs] = {0};
-      for (int idx = 0; idx < n_obs; idx++)
+      double sq_R_inv[dim * dim];
+      for (int i = 0; i < dim * dim; i++)
       {
-         I_R_P[idx * n_obs + idx] = 1;
+         sq_R_inv[i] = R_inv[i];
       }
+
+      double h[dim];
+      cblas_dgemv(CblasColMajor, CblasTrans,
+                  dim, dim, 1.0, sq_R_inv, dim, x_neg_T, 1, 0.0, h, 1);
+
+      double temp_vec[dim * dim];
+      // cblas_dgemv(CblasColMajor, CblasTrans,
+      //             dim, n_obs, 1.0, R_inv, dim, x_neg_T, 1, 0.0, temp_vec, 1);
+      cblas_dger(CblasColMajor, dim, dim, 1.0, h, 1, h, 1, temp_vec, dim);
+      double s = 1 + cblas_ddot(dim, h, 1, h, 1);
+
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
-                  n_obs, n_obs, dim, -1.0, R, n_obs, R_inv, dim, 1.0, I_R_P, n_obs);
-      cblas_dgemv(CblasColMajor, CblasNoTrans,
-                  n_obs, n_obs, 1.0, I_R_P, n_obs, c, 1, 0.0, u, 1);
+                  dim, dim, dim, 1.0 / s, sq_R_inv, dim, temp_vec, dim, 0.0, R_inv_pepin, dim);
 
-      double h_mag = cblas_ddot(n_obs, h, 1, h, 1);
-      double u_mag = cblas_ddot(n_obs, u, 1, u, 1);
-
-      double temp_vec[n_obs];
-      cblas_dgemv(CblasColMajor, CblasTrans,
-                  dim, n_obs, 1.0, R_inv, dim, x_neg_T, 1, 0.0, temp_vec, 1);
-      double s = 1 + cblas_ddot(n_obs, temp_vec, 1, c, 1);
-
-      double alpha = -(u_mag / s);
-      double p_2[dim];
-      cblas_dgemv(CblasColMajor, CblasNoTrans, dim, n_obs,
-                  alpha, R_inv, dim, h, 1, 0.0, p_2, 1);
-      for (int i = 0; i < dim; i++)
-      {
-         p_2[i] -= k[i];
-      }
-
-      double q_2[n_obs];
-      alpha = -(h_mag / s);
-      for (int i = 0; i < n_obs; i++)
-      {
-         q_2[i] = alpha * u[i] - h[i];
-      }
-
-      double sigma_2 = h_mag * u_mag + s * s;
-      double P_h[dim];
-      double alpha_1 = 1.0 / s;
-      cblas_dgemv(CblasColMajor, CblasNoTrans, dim, n_obs,
-                  alpha_1, R_inv, dim, h, 1, 0.0, P_h, 1);
-      cblas_dger(CblasColMajor, dim, n_obs, 1.0, P_h, 1, u, 1, R_inv, dim);
-
-      double alpha_2 = -(s / sigma_2);
-      cblas_dger(CblasColMajor, dim, n_obs, alpha_2, p_2, 1, q_2, 1, R_inv, dim);
+      double jaja = 5;
    }
    LOG_DEBUG("downdate just before deleteRows ");
 
@@ -347,6 +339,9 @@ void QR_Rls::downdate()
    all_Q = deleteColColMajor(all_Q, n_obs - 1, n_obs);
    X = deleteRowColMajor(X, n_obs, dim);
    y = deleteRowColMajor(y, n_obs, 1);
+   // delete thius
+   double anotha_z[n_obs];
+   std::memcpy(anotha_z, z, n_obs * sizeof(double));
    z = deleteRowColMajor(z, n_obs, 1);
    n_obs--;
    r_c_size = n_obs * dim;
@@ -360,8 +355,25 @@ void QR_Rls::downdate()
       }
    }
 
+   // compare both
+   // double *temp_R_inv = new double[r_c_size];
+   double temp_R_inv[r_c_size];
+   double je = 0;
+   pinv(R, temp_R_inv, X_rows, dim);
+
+   for (i = 0; i < n_obs * dim; i++)
+   {
+      je += abs(temp_R_inv[i] - R_inv_pepin[i]);
+   }
+
    LOG_DEBUG("downdate just before cblas call");
    cblas_dgemv(CblasColMajor, CblasTrans, n_obs, n_obs, 1.0, all_Q, n_obs, y, 1, 0.0, z, 1);
+   double temp_z[n_obs + 1];
+   cblas_dgemv(CblasColMajor, CblasTrans,
+               n_obs + 1, n_obs + 1, 1.0, G, n_obs + 1, anotha_z, 1, 0.0, temp_z, 1);
+   double chacha[n_obs];
+   std::memcpy(chacha, z, n_obs * sizeof(double));
+   // z = deleteRowColMajor(z, n_obs, 1);
    cblas_dgemv(CblasColMajor, CblasNoTrans, dim, n_obs, 1.0, R_inv, dim, z, 1, 0.0, w, 1);
 
    // Cleanup
