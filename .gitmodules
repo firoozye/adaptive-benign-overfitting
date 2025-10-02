@@ -6,3 +6,4 @@
 	url = https://github.com/Reference-LAPACK/lapack.git
 [submodule "libs/benchmark"]
 	path = libs/benchmark
+	url  = https://github.com/google/benchmark.git
