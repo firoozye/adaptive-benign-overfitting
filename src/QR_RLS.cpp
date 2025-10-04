@@ -310,26 +310,24 @@ void QR_Rls::downdate()
          x_neg_T[i] = -1 * x_T[i];
       }
 
-      double sq_R_inv[dim * dim];
-      for (int i = 0; i < dim * dim; i++)
-      {
-         sq_R_inv[i] = R_inv[i];
-      }
+      double G_e_1[n_obs];
+      cblas_dgemv(CblasColMajor, CblasNoTrans,
+                  n_obs, n_obs, 1.0, G, n_obs, c, 1, 0.0, G_e_1, 1);
 
-      double h[dim];
+      double h[dim] = {0};
+      cblas_dgemv(CblasColMajor, CblasNoTrans,
+                  dim, n_obs, 1.0, R_inv, dim, G_e_1, 1, 0.0, h, 1);
+      
+      double k[n_obs] = {0};
       cblas_dgemv(CblasColMajor, CblasTrans,
-                  dim, dim, 1.0, sq_R_inv, dim, x_neg_T, 1, 0.0, h, 1);
+                  dim, n_obs, 1.0, R_inv, dim, x_neg_T, 1, 0.0, k, 1);
 
-      double temp_vec[dim * dim];
-      // cblas_dgemv(CblasColMajor, CblasTrans,
-      //             dim, n_obs, 1.0, R_inv, dim, x_neg_T, 1, 0.0, temp_vec, 1);
-      cblas_dger(CblasColMajor, dim, dim, 1.0, h, 1, h, 1, temp_vec, dim);
-      double s = 1 + cblas_ddot(dim, h, 1, h, 1);
-
+      double s = 1 + cblas_ddot(n_obs, k, 1, G_e_1, 1);
+      cblas_dger(CblasColMajor, dim, n_obs, -1.0/s, h, 1, k, 1, R_inv, dim);
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
-                  dim, dim, dim, 1.0 / s, sq_R_inv, dim, temp_vec, dim, 0.0, R_inv_pepin, dim);
+                dim, n_obs, n_obs, 1, R_inv, dim, G, n_obs, 0, result, dim);
+      std::memcpy(R_inv, result, n_obs * dim * sizeof(double));
 
-      double jaja = 5;
    }
    LOG_DEBUG("downdate just before deleteRows ");
 
@@ -361,9 +359,12 @@ void QR_Rls::downdate()
    double je = 0;
    pinv(R, temp_R_inv, X_rows, dim);
 
+   //double *result = new double[r_c_size];
+   
+
    for (i = 0; i < n_obs * dim; i++)
    {
-      je += abs(temp_R_inv[i] - R_inv_pepin[i]);
+      je += abs(temp_R_inv[i] - R_inv[i]);
    }
 
    LOG_DEBUG("downdate just before cblas call");
