@@ -73,6 +73,8 @@ std::pair<double *, double *> Q_R_compute(QR_Rls *qr_rls, double *A, int m, int 
             Q[j * ldm + i] = A_copy[j * ldm + i];
          }
       }
+
+      double ksdk = 5;
    }
    else
    {
