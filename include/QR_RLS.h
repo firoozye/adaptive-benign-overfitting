@@ -35,6 +35,7 @@ public:
    void update(double *new_x, double &new_y);
    void downdate();
    double pred(double *x);
+   double get_cond_num();
 
    // Input data
    double *X; // Input matrix

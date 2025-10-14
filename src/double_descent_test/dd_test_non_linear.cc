@@ -84,8 +84,11 @@ int main()
 
    int d = num_cols;
    vector<double> all_mse_array;
+   vector<double> all_var_array;
+   vector<double> all_cond_num_mean_array;
+   vector<double> all_cond_num_var_array;
 
-   for (int idx_rff = 1; idx_rff < 16; idx_rff++)
+   for (int idx_rff = 1; idx_rff < 14; idx_rff++)
    {
       int D = pow(2, idx_rff);
       double kernel_var = 1.0;
@@ -108,16 +111,19 @@ int main()
 
       int max_obs = num_rows;
       double ff = 1.0;
+      //double ff = .98;
       double lambda = 0.1;
       QR_Rls qr_rls(X, y, max_obs, ff, lambda, D, num_rows);
 
       vector<double> preds;
       vector<double> mse;
+      vector<double> cond_nums;
       double all_mse = 0;
+      double all_cond_nums = 0;
 
       double X_update[D];
 
-      int n_its = 100;
+      int n_its = 200;
       for (int i = 0; i < n_its; i++)
       {
          MatrixXd X_update_old = g_rff.transform(update_matrix.row(i));
@@ -126,22 +132,52 @@ int main()
             X_update[i] = X_update_old(0, i);
          }
 
-         // preds.push_back(qr_rls.pred(X_update));
+         preds.push_back(qr_rls.pred(X_update));
          qr_rls.update(X_update, y_update[i]);
 
-         preds.push_back(qr_rls.pred(X_update));
-         mse.push_back(pow(preds[i] - y_update[i], 2));
-         all_mse += pow(preds[i] - y_update[i], 2);
+         //preds.push_back(qr_rls.pred(X_update));
+         double temp_res = pow(preds[i] - y_update[i], 2);
+         mse.push_back(temp_res);
+         all_mse += temp_res;
+
+         double temp_cond_num = qr_rls.get_cond_num();
+         cond_nums.push_back(temp_cond_num);
+         all_cond_nums += temp_cond_num;
+      }
+
+      double var = 0;
+      double var_cond_nums = 0;
+      double real_mse = all_mse / n_its;
+      double mean_cond_num = all_cond_nums / n_its;
+      for (int i=0; i<n_its; i++){
+         double temp = mse[i] - real_mse;
+         var += temp*temp;
+
+         double temp_1 = cond_nums[i] - mean_cond_num;
+         var_cond_nums += temp_1*temp_1;
       }
 
       cout << "Number of RFF: " << D << endl;
-      cout << "MSE: " << all_mse << endl;
-      all_mse_array.push_back(all_mse / n_its);
+      cout << "ResMSE: " << real_mse << endl;
+      cout << "ResVAR: " << var / (n_its-1) << endl;
+      cout << "CondNumMSE: " << mean_cond_num << endl;
+      cout << "CondNumVAR: " << var_cond_nums / (n_its-1) << endl;
+
+      all_mse_array.push_back(real_mse);
+      all_var_array.push_back(var / (n_its-1));
+      all_cond_num_mean_array.push_back(mean_cond_num);
+      all_cond_num_var_array.push_back(var_cond_nums / (n_its-1));
       delete[] X;
    }
    // save as column
-   // saveVectorToCSV(all_mse_array, "dd_train_mse.csv", false);
+   //saveVectorToCSV(all_mse_array, "dd_train_res_mse.csv", false);
+   //saveVectorToCSV(all_var_array, "dd_train_res_var.csv", false);
+   //saveVectorToCSV(all_cond_num_mean_array, "train_cond_num_mean.csv", false);
+   //saveVectorToCSV(all_cond_num_var_array, "train_cond_num_var.csv", false);
    saveVectorToCSV(all_mse_array, "dd_test_mse.csv", false);
+   saveVectorToCSV(all_var_array, "dd_test_var.csv", false);
+   saveVectorToCSV(all_cond_num_mean_array, "test_cond_num_mean.csv", false);
+   saveVectorToCSV(all_cond_num_var_array, "test_cond_num_var.csv", false);
 
    return 0;
 };
