@@ -88,7 +88,11 @@
     "splines": "cpp",
     "dense": "cpp",
     "*.expression": "cpp",
-    "codecvt": "cpp"
+    "codecvt": "cpp",
+    "optional": "cpp",
+    "format": "cpp",
+    "span": "cpp",
+    "variant": "cpp"
   },
   "cmake.sourceDirectory": "/mnt/c/Users/luiso/OneDrive/Documents/double_descent_project_C++/libs/eigen"
 }
