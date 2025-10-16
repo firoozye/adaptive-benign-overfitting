@@ -29,13 +29,13 @@ BENCH_LDFLAGS  := -L$(BENCH_LIBDIR)
 BENCH_LDLIBS   := -lbenchmark -lpthread
 
 # Auto-build libbenchmark.a if missing
+
 $(BENCH_AR):
-	@echo "[benchmark] configuring…"
 	@cmake -S $(BENCH_DIR) -B $(BENCH_DIR)/build \
 		-DCMAKE_BUILD_TYPE=Release \
 		-DBENCHMARK_ENABLE_TESTING=OFF \
-		-DBENCHMARK_DOWNLOAD_DEPENDENCIES=ON
-	@echo "[benchmark] building…"
+		-DBENCHMARK_DOWNLOAD_DEPENDENCIES=ON \
+		-DCMAKE_CXX_COMPILER=$(CXX)
 	@cmake --build $(BENCH_DIR)/build -j
 
 
