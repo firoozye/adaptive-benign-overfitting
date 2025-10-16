@@ -49,7 +49,7 @@ int main()
 
    int start_row = 0;
    int start_col = 0;
-   int num_rows = 14;
+   int num_rows = 20;
    int num_cols = 7;
 
    int num_elements = ret_price.size() - num_rows;
@@ -88,9 +88,10 @@ int main()
    vector<double> all_cond_num_mean_array;
    vector<double> all_cond_num_var_array;
 
-   for (int idx_rff = 1; idx_rff < 14; idx_rff++)
+   for (int idx_rff = 1; idx_rff < 15; idx_rff++)
    {
       int D = pow(2, idx_rff);
+      // int D = pow(2, 14);
       double kernel_var = 1.0;
       // double kernel_var = 1.0 / 4.0;
       // double kernel_var = 1.0 / 2.0;
@@ -110,8 +111,8 @@ int main()
       }
 
       int max_obs = num_rows;
-      double ff = 1.0;
-      //double ff = .98;
+      // double ff = 1.0;
+      double ff = .9;
       double lambda = 0.1;
       QR_Rls qr_rls(X, y, max_obs, ff, lambda, D, num_rows);
 
@@ -123,7 +124,7 @@ int main()
 
       double X_update[D];
 
-      int n_its = 200;
+      int n_its = 1000;
       for (int i = 0; i < n_its; i++)
       {
          MatrixXd X_update_old = g_rff.transform(update_matrix.row(i));
@@ -135,49 +136,51 @@ int main()
          preds.push_back(qr_rls.pred(X_update));
          qr_rls.update(X_update, y_update[i]);
 
-         //preds.push_back(qr_rls.pred(X_update));
+         // preds.push_back(qr_rls.pred(X_update));
          double temp_res = pow(preds[i] - y_update[i], 2);
          mse.push_back(temp_res);
          all_mse += temp_res;
 
-         double temp_cond_num = qr_rls.get_cond_num();
-         cond_nums.push_back(temp_cond_num);
-         all_cond_nums += temp_cond_num;
+         // double temp_cond_num = qr_rls.get_cond_num();
+         // cond_nums.push_back(temp_cond_num);
+         // all_cond_nums += temp_cond_num;
       }
 
       double var = 0;
       double var_cond_nums = 0;
       double real_mse = all_mse / n_its;
-      double mean_cond_num = all_cond_nums / n_its;
-      for (int i=0; i<n_its; i++){
+      // double mean_cond_num = all_cond_nums / n_its;
+      for (int i = 0; i < n_its; i++)
+      {
          double temp = mse[i] - real_mse;
-         var += temp*temp;
+         var += temp * temp;
 
-         double temp_1 = cond_nums[i] - mean_cond_num;
-         var_cond_nums += temp_1*temp_1;
+         // double temp_1 = cond_nums[i] - mean_cond_num;
+         // var_cond_nums += temp_1 * temp_1;
       }
 
       cout << "Number of RFF: " << D << endl;
       cout << "ResMSE: " << real_mse << endl;
-      cout << "ResVAR: " << var / (n_its-1) << endl;
-      cout << "CondNumMSE: " << mean_cond_num << endl;
-      cout << "CondNumVAR: " << var_cond_nums / (n_its-1) << endl;
+      cout << "ResVAR: " << var / (n_its - 1) << endl;
+      // cout << "CondNumMSE: " << mean_cond_num << endl;
+      // cout << "CondNumVAR: " << var_cond_nums / (n_its - 1) << endl;
 
       all_mse_array.push_back(real_mse);
-      all_var_array.push_back(var / (n_its-1));
-      all_cond_num_mean_array.push_back(mean_cond_num);
-      all_cond_num_var_array.push_back(var_cond_nums / (n_its-1));
+      all_var_array.push_back(var / (n_its - 1));
+      // all_cond_num_mean_array.push_back(mean_cond_num);
+      // all_cond_num_var_array.push_back(var_cond_nums / (n_its - 1));
+
+      // saveVectorToCSV(cond_nums, "res_real_cond_num_false_cond_num/cond_nums_" + std::to_string(D) + ".csv", false);
+
       delete[] X;
    }
    // save as column
-   //saveVectorToCSV(all_mse_array, "dd_train_res_mse.csv", false);
-   //saveVectorToCSV(all_var_array, "dd_train_res_var.csv", false);
-   //saveVectorToCSV(all_cond_num_mean_array, "train_cond_num_mean.csv", false);
-   //saveVectorToCSV(all_cond_num_var_array, "train_cond_num_var.csv", false);
+   // saveVectorToCSV(all_mse_array, "dd_train_res_mse.csv", false);
+   // saveVectorToCSV(all_var_array, "dd_train_res_var.csv", false);
+   // saveVectorToCSV(all_cond_num_mean_array, "cond_num_mean.csv", false);
+   // saveVectorToCSV(all_cond_num_var_array, "cond_num_var.csv", false);
    saveVectorToCSV(all_mse_array, "dd_test_mse.csv", false);
    saveVectorToCSV(all_var_array, "dd_test_var.csv", false);
-   saveVectorToCSV(all_cond_num_mean_array, "test_cond_num_mean.csv", false);
-   saveVectorToCSV(all_cond_num_var_array, "test_cond_num_var.csv", false);
 
    return 0;
 };

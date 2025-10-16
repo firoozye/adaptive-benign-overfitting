@@ -60,5 +60,4 @@ public:
    int dim;      // Dimension of input
    double ff;    // Forgetting factor
    double b;     // Beta parameter
-   int i;        // Iterator
 };

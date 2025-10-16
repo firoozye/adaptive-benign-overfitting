@@ -1,131 +1,108 @@
 #include "dd_test.h"
 #include <benchmark/benchmark.h>
-#include <fstream>
+#include <Eigen/Dense>
 #include <vector>
 #include <string>
 #include <cmath>
 #include <iostream>
 
-using namespace std;
-
 namespace
 {
 
-   // Data prepared once and reused across iterations
+   // Cached inputs reused across runs
    struct DataCache
    {
-      int num_rows;
-      int num_cols;
-      std::vector<double> y_vec;        // size num_rows
-      std::vector<double> y_update_vec; // size num_elements
+      int num_rows{};
+      int num_cols{};
+      std::vector<double> y_vec;        // size = num_rows
+      std::vector<double> y_update_vec; // size = (#samples - num_rows)
       Eigen::MatrixXd initial_matrix;   // num_rows x num_cols
-      Eigen::MatrixXd update_matrix;    // (len-num_rows) x num_cols
+      Eigen::MatrixXd update_matrix;    // (len - num_rows) x num_cols
    };
 
-   // Load & prep all inputs once
    const DataCache &getData()
    {
       static bool inited = false;
       static DataCache cache;
-
       if (!inited)
       {
-         vector<vector<string>> data_set = read_csv_func("data/non_linear_ts_lags.csv");
-         vector<vector<string>> target_data = read_csv_func("data/target_non_linear_ts.csv");
+         // Load CSVs once (adjust paths to your dataset)
+         std::vector<std::vector<std::string>> data_set =
+             read_csv_func("data/non_linear_ts_lags.csv");
+         std::vector<std::vector<std::string>> target_data =
+             read_csv_func("data/target_non_linear_ts.csv");
 
-         int len_data_set = static_cast<int>(data_set.size()) - 1;
-         int num_cols = 7;
-         int num_rows = 14;
+         const int len_data_set = static_cast<int>(data_set.size()) - 1;
+         const int num_cols = 7;  // lags used when creating the TS
+         const int num_rows = 20; // initial batch size
 
-         vector<double> ret_price;
-         ret_price.reserve(static_cast<size_t>(len_data_set - 1));
+         std::vector<double> y_all;
+         y_all.reserve(static_cast<size_t>(len_data_set - 1));
          for (int i = 1; i < len_data_set; ++i)
          {
-            ret_price.push_back(stod(target_data[i][0]));
+            y_all.push_back(std::stod(target_data[i][0]));
          }
 
-         int num_elements = static_cast<int>(ret_price.size()) - num_rows;
+         const int num_elements = static_cast<int>(y_all.size()) - num_rows;
 
-         // y and y_update (as vectors)
          cache.y_vec.resize(num_rows);
          for (int i = 0; i < num_rows; ++i)
-            cache.y_vec[i] = ret_price[i];
+            cache.y_vec[i] = y_all[i];
+
          cache.y_update_vec.resize(num_elements);
          for (int i = 0; i < num_elements; ++i)
-            cache.y_update_vec[i] = ret_price[num_rows + i];
+            cache.y_update_vec[i] = y_all[num_rows + i];
 
-         // Build lag matrix
-         Eigen::MatrixXd close_lag_mat(len_data_set, num_cols);
+         Eigen::MatrixXd lag_mat(len_data_set, num_cols);
          for (int i = 1; i < len_data_set; ++i)
-         {
             for (int j = 0; j < num_cols; ++j)
-            {
-               close_lag_mat(i, j) = stod(data_set[i][j]);
-            }
-         }
+               lag_mat(i, j) = std::stod(data_set[i][j]);
 
-         cache.initial_matrix = close_lag_mat.block(0, 0, num_rows, num_cols);
-         cache.update_matrix = close_lag_mat.block(num_rows, 0, close_lag_mat.rows() - num_rows, num_cols);
+         cache.initial_matrix = lag_mat.block(0, 0, num_rows, num_cols);
+         cache.update_matrix =
+             lag_mat.block(num_rows, 0, lag_mat.rows() - num_rows, num_cols);
+
          cache.num_rows = num_rows;
          cache.num_cols = num_cols;
-
          inited = true;
       }
       return cache;
    }
 
-   // One benchmarked run for a given D (RFF count)
-   void run_once_for_D(int D)
+   // One timed pass of update+pred repeated n_its times
+   void run_once_for_D(
+       int D,
+       QR_Rls &qr_rls,
+       const DataCache &data,
+       GaussianRFF &g_rff,
+       std::vector<double> &preds,
+       std::vector<double> &mse,
+       std::vector<double> &X_update,
+       int n_its,
+       benchmark::State &state) // <— pass state reference
    {
-      const auto &data = getData();
-      const int num_rows = data.num_rows;
-
-      // Build features
-      int d = data.num_cols;
-      double kernel_var = 1.0;
-      bool seed = true;
-
-      GaussianRFF g_rff(d, D, kernel_var, seed);
-      Eigen::MatrixXd X_old = g_rff.transform_matrix(data.initial_matrix);
-
-      // Column-major raw array as required by your QR_Rls
-      std::vector<double> X(static_cast<size_t>(num_rows) * D);
-      for (int j = 0; j < D; ++j)
-         for (int i = 0; i < num_rows; ++i)
-            X[i + j * num_rows] = X_old(i, j);
-
-      // y array
-      std::vector<double> y = data.y_vec;
-
-      int max_obs = num_rows;
-      double ff = 1.0;
-      double lambda = 0.1;
-
-      QR_Rls qr_rls(X.data(), y.data(), max_obs, ff, lambda, D, num_rows);
-
-      std::vector<double> preds;
-      std::vector<double> mse;
-      int n_its = 100;
+      preds.clear();
+      mse.clear();
       preds.reserve(n_its);
       mse.reserve(n_its);
 
-      std::vector<double> X_update(static_cast<size_t>(D));
-
       for (int t = 0; t < n_its; ++t)
       {
+         state.PauseTiming();
          Eigen::MatrixXd X_update_old = g_rff.transform(data.update_matrix.row(t));
          for (int i = 0; i < D; ++i)
             X_update[i] = X_update_old(0, i);
+         state.ResumeTiming();
 
          double y_new = data.y_update_vec[t];
+         double p = qr_rls.pred(X_update.data());
          qr_rls.update(X_update.data(), y_new);
 
-         double p = qr_rls.pred(X_update.data());
          preds.push_back(p);
-         mse.push_back((p - data.y_update_vec[t]) * (p - data.y_update_vec[t]));
+         double err = p - y_new;
+         mse.push_back(err * err);
       }
 
-      // Prevent the compiler from optimizing away the work
       benchmark::DoNotOptimize(preds.data());
       benchmark::DoNotOptimize(mse.data());
       benchmark::ClobberMemory();
@@ -137,21 +114,46 @@ namespace
 
 static void BM_QR_RLS_RFF(benchmark::State &state)
 {
-   int D = static_cast<int>(state.range(0)); // number of random Fourier features
-   // Warm up data (outside timing)
-   (void)getData();
+   const int D = static_cast<int>(state.range(0)); // RFF dimension
+   const auto &data = getData();                   // warm inputs
+   const int num_rows = data.num_rows;
 
+   // --- Setup (outside timing) ----------------------------------------
+   const int d = data.num_cols;
+   const double kernel_var = 1.0;
+   const bool seed = true;
+
+   GaussianRFF g_rff(d, D, kernel_var, seed);
+   Eigen::MatrixXd X0 = g_rff.transform_matrix(data.initial_matrix);
+
+   // Column-major raw storage for QR_Rls constructor
+   std::vector<double> X(static_cast<size_t>(num_rows) * D);
+   for (int j = 0; j < D; ++j)
+      for (int i = 0; i < num_rows; ++i)
+         X[i + j * num_rows] = X0(i, j);
+
+   std::vector<double> y = data.y_vec;
+
+   const int max_obs = num_rows;
+   const double ff = 1.0;
+   const double lambda = 0.1;
+
+   QR_Rls qr_rls(X.data(), y.data(), max_obs, ff, lambda, D, num_rows);
+
+   std::vector<double> preds;
+   std::vector<double> mse;
+   std::vector<double> X_update(static_cast<size_t>(D));
+   const int n_its = 1000;
+
+   // --- Timed section --------------------------------------------------
    for (auto _ : state)
    {
-      run_once_for_D(D);
+      run_once_for_D(D, qr_rls, data, g_rff, preds, mse, X_update, n_its, state);
    }
-   // Optionally report items processed, custom counters, etc.
+
    state.counters["D"] = D;
 }
 
-// Sweep D = 2^1, 2^2, ..., 2^14 (same spirit as your loop)
-BENCHMARK(BM_QR_RLS_RFF)
-    ->RangeMultiplier(2)
-    ->Range(2, 1 << 14);
-
+// Sweep D = 2^1, 2^2, ..., 2^14
+BENCHMARK(BM_QR_RLS_RFF)->RangeMultiplier(2)->Range(2, 1 << 14);
 BENCHMARK_MAIN();

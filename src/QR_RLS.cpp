@@ -2,7 +2,6 @@
 
 using namespace std;
 
-
 QR_Rls::~QR_Rls()
 {
    LOG_INFO("QR_Rls destructor called");
@@ -33,8 +32,7 @@ QR_Rls::QR_Rls(double *x_input, double *y_input, int max_obs, double ff, double 
       n_obs(n_batch),
       dim(dim),
       ff(sqrt(ff)),
-      b(1),
-      i(1)
+      b(1)
 {
 
    X = new double[n_obs * dim]();
@@ -46,11 +44,13 @@ QR_Rls::QR_Rls(double *x_input, double *y_input, int max_obs, double ff, double 
    LOG_INFO("QR_Rls constructor called with dim: " << dim << " and n_batch: " << n_batch);
 
    // Forgetting factor matrix
-   
-   for (int i = 0; i < n_obs; i++) {
-      double pow_n = (n_obs - i - 1)/2;
+
+   for (int i = 0; i < n_obs; i++)
+   {
+      double pow_n = (n_obs - i - 1) / 2;
       double scale = pow(ff, pow_n);
-      for (int j = 0; j < dim; j++) {
+      for (int j = 0; j < dim; j++)
+      {
          X[j * n_obs + i] *= scale;
       }
    }
@@ -73,9 +73,6 @@ QR_Rls::QR_Rls(double *x_input, double *y_input, int max_obs, double ff, double 
                X_rows, X_rows, 1.0, all_Q, X_rows, y, 1, 0.0, z, 1);
    cblas_dgemv(CblasColMajor, CblasNoTrans,
                dim, X_rows, 1.0, R_inv, dim, z, 1, 0.0, w, 1);
-
-   i = 1;
-
 }
 
 // Update method
@@ -94,8 +91,8 @@ void QR_Rls::update(double *new_x, double &new_y)
 
    for (int i = 0; i < r_c_size; ++i)
    {
-      R_inv[i] *= (1.0 / pow(ff, 1/2));
-      R[i] *= pow(ff, 1/2);
+      R_inv[i] *= (1.0 / pow(ff, 1 / 2));
+      R[i] *= pow(ff, 1 / 2);
    }
 
    double d[n_obs];
@@ -110,8 +107,9 @@ void QR_Rls::update(double *new_x, double &new_y)
    cblas_dgemv(CblasColMajor, CblasNoTrans,
                dim, n_obs, 1.0, R_inv, dim, temp_c, 1, 0.0, c, 1);
 
-   for (int i=0; i<dim; i++){
-      c[i] = new_x[i] - c[i]; 
+   for (int i = 0; i < dim; i++)
+   {
+      c[i] = new_x[i] - c[i];
    }
 
    // Update for new regime
@@ -129,10 +127,10 @@ void QR_Rls::update(double *new_x, double &new_y)
 
       // weight update
       double x_T_w = cblas_ddot(dim, new_x, 1, w, 1);
-      for (i=0; i<dim; i++){
-         w[i] += c_inv[i]*(new_y - x_T_w);
+      for (int i = 0; i < dim; i++)
+      {
+         w[i] += c_inv[i] * (new_y - x_T_w);
       }
-
    }
    // Update for old regime
    else
@@ -152,10 +150,10 @@ void QR_Rls::update(double *new_x, double &new_y)
 
       // weight update
       double x_T_w = cblas_ddot(dim, new_x, 1, w, 1);
-      for (i=0; i<dim; i++){
-         w[i] += b_k[i]*(new_y - x_T_w);
+      for (int i = 0; i < dim; i++)
+      {
+         w[i] += b_k[i] * (new_y - x_T_w);
       }
-
    }
 
    R = addRowColMajor(R, n_obs, dim);
@@ -179,8 +177,6 @@ void QR_Rls::update(double *new_x, double &new_y)
                dim, n_obs, n_obs, 1.0, R_inv, dim, G, n_obs, 0.0, P_copy, dim);
    std::memcpy(R_inv, P_copy, n_obs * dim * sizeof(double));
    delete[] P_copy;
-
-   i++;
 
    // G will be allocated in givens_update
    if (G != nullptr)
@@ -212,7 +208,7 @@ void QR_Rls::downdate()
    for (int i = 0; i < dim; ++i)
    {
       x_T[i] = R[n_obs * i]; // Copy the first row=
-      //x_T[i] = X[n_obs * i]; // Copy the first row=
+      // x_T[i] = X[n_obs * i]; // Copy the first row=
    }
 
    double c[n_obs] = {0}; // initializes to zero
@@ -255,10 +251,10 @@ void QR_Rls::downdate()
       // Weight downdate
 
       double k_inv_w = cblas_ddot(dim, k_inv, 1, w, 1);
-      for (int i = 0; i < dim; ++i) {
-         w[i] -= k[i]*k_inv_w;
+      for (int i = 0; i < dim; ++i)
+      {
+         w[i] -= k[i] * k_inv_w;
       }
-
    }
    // Deletion for old regime
    else
@@ -272,22 +268,22 @@ void QR_Rls::downdate()
       double h[dim];
       cblas_dgemv(CblasColMajor, CblasNoTrans,
                   dim, n_obs, 1.0, R_inv, dim, G_e_1, 1, 0.0, h, 1);
-      
+
       double k[n_obs];
       cblas_dgemv(CblasColMajor, CblasTrans,
                   dim, n_obs, 1.0, R_inv, dim, x_T, 1, 0.0, k, 1);
 
       double s = 1 - cblas_ddot(n_obs, k, 1, G_e_1, 1);
-      cblas_dger(CblasColMajor, dim, n_obs, 1.0/s, h, 1, k, 1, R_inv, dim);
+      cblas_dger(CblasColMajor, dim, n_obs, 1.0 / s, h, 1, k, 1, R_inv, dim);
 
       // Weight downdate
       double x_T_B = cblas_ddot(dim, x_T, 1, w, 1);
       double y_0 = y[0];
 
-      for (i=0; i<dim; i++){
-         w[i] -= (1.0/s) * (y_0 - x_T_B) * h[i];
+      for (int i = 0; i < dim; i++)
+      {
+         w[i] -= (1.0 / s) * (y_0 - x_T_B) * h[i];
       }
-
    }
    LOG_DEBUG("downdate just before deleteRows ");
 
@@ -324,15 +320,15 @@ double QR_Rls::pred(double *x)
 
 double QR_Rls::get_cond_num()
 {
-   lapack_int m = n_obs, n = dim, lda = m;
+   lapack_int m = dim, n = n_obs, lda = m;
    lapack_int ldu = m, ldvt = n;
 
    double *A_copy = new double[n_obs * dim];
-   std::memcpy(A_copy, R, n_obs * dim * sizeof(double));
+   std::memcpy(A_copy, R_inv, n_obs * dim * sizeof(double));
    int min_mn = std::min(n_obs, dim);
    double s[min_mn];
-   double *u = new double[n_obs * n_obs];
-   double *vt = new double[dim * dim];
+   double *u = new double[ldu * ldu];
+   double *vt = new double[ldvt * ldvt];
    LAPACKE_dgesdd(LAPACK_COL_MAJOR, 'A', m, n, A_copy, lda, s, u, ldu, vt, ldvt);
 
    double maxS = *std::max_element(s, s + min_mn);
@@ -342,6 +338,5 @@ double QR_Rls::get_cond_num()
    delete[] vt;
    delete[] u;
 
-   return maxS/minS;
+   return maxS / minS;
 }
-
