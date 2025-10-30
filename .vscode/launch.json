@@ -7,7 +7,8 @@
       "request": "launch",
       //"program": "${workspaceFolder}/abo_predict", // Path to your executable
       //"program": "${workspaceFolder}/dd_test",
-      "program": "${workspaceFolder}/dd_test",
+      //"program": "${workspaceFolder}/dd_test",
+      "program": "${workspaceFolder}/real_cond_num_test",
       //"program": "${workspaceFolder}/timing_test",
       "args": [], // Command-line arguments
       "stopAtEntry": false,

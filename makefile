@@ -56,9 +56,10 @@ COMMON_SRCS := \
 # Per-target main files
 dd_test_MAIN     := $(SRC_DIR)/double_descent_test/dd_test_non_linear.cc
 timing_test_MAIN := $(SRC_DIR)/timing_test/timing_test_non_linear_ts.cc
+real_cond_num_test_MAIN := $(SRC_DIR)/stability_plots/real_cond_num.cc
 
 # Targets
-PROGS := dd_test timing_test
+PROGS := dd_test timing_test real_cond_num_test
 
 # Helper: turn a list of .cc/.cpp under SRC_DIR into objs under OBJ_DIR (mirrors tree)
 make-objs = $(patsubst $(SRC_DIR)/%.cc,$(OBJ_DIR)/%.o, \
@@ -68,9 +69,11 @@ make-objs = $(patsubst $(SRC_DIR)/%.cc,$(OBJ_DIR)/%.o, \
 
 dd_test_SRCS     := $(dd_test_MAIN)     $(COMMON_SRCS)
 timing_test_SRCS := $(timing_test_MAIN) $(COMMON_SRCS)
+real_cond_num_test_SRCS := $(real_cond_num_test_MAIN) $(COMMON_SRCS)
 
 dd_test_OBJS     := $(call make-objs,$(dd_test_SRCS))
 timing_test_OBJS := $(call make-objs,$(timing_test_SRCS))
+real_cond_num_test_OBJS := $(call make-objs,$(real_cond_num_test_SRCS))
 
 $(timing_test_OBJS): CPPFLAGS += $(BENCH_CPPFLAGS)
 
@@ -88,6 +91,11 @@ dd_test: $(dd_test_OBJS)
 timing_test: $(BENCH_AR) $(timing_test_OBJS)
 	@echo "Linking $@ as benchmark…"
 	$(CXX) $(LDFLAGS) $(BENCH_LDFLAGS) $(timing_test_OBJS) $(LDLIBS) $(BENCH_LDLIBS) -o $@
+	@echo "Build successful: $@"
+
+real_cond_num_test: $(real_cond_num_test_OBJS)
+	@echo "Linking $@…"
+	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
 	@echo "Build successful: $@"
 
 # --- Compile rules (auto-mkdir + deps) --------------------------------------

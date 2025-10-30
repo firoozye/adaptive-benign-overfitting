@@ -340,3 +340,26 @@ double QR_Rls::get_cond_num()
 
    return maxS / minS;
 }
+
+double QR_Rls::get_real_cond_num()
+{
+   lapack_int m = n_obs, n = dim, lda = m;
+   lapack_int ldu = m, ldvt = n;
+
+   double *A_copy = new double[n_obs * dim];
+   std::memcpy(A_copy, X, n_obs * dim * sizeof(double));
+   int min_mn = std::min(n_obs, dim);
+   double s[min_mn];
+   double *u = new double[ldu * ldu];
+   double *vt = new double[ldvt * ldvt];
+   LAPACKE_dgesdd(LAPACK_COL_MAJOR, 'A', m, n, A_copy, lda, s, u, ldu, vt, ldvt);
+
+   double maxS = *std::max_element(s, s + min_mn);
+   double minS = *std::min_element(s, s + min_mn);
+
+   delete[] A_copy;
+   delete[] vt;
+   delete[] u;
+
+   return maxS / minS;
+}
