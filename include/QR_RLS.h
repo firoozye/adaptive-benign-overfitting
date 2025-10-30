@@ -36,6 +36,7 @@ public:
    void downdate();
    double pred(double *x);
    double get_cond_num();
+   double get_real_cond_num();
 
    // Input data
    double *X; // Input matrix
