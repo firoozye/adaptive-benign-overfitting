@@ -1,2 +1,6 @@
+data/LD2011_2014.txt filter=lfs diff=lfs merge=lfs -text
+experiments/electricity/LD2011_2014.csv filter=lfs diff=lfs merge=lfs -text
+data/household_power_consumption.txt filter=lfs diff=lfs merge=lfs -text
+data/electricity/lags_LD2011_2014.csv filter=lfs diff=lfs merge=lfs -text
 *.csv filter=lfs diff=lfs merge=lfs -text
 *.txt filter=lfs diff=lfs merge=lfs -text
