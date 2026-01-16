@@ -61,7 +61,8 @@ int pinv(double *A, double *P, const int int_m, const int int_n, double toleranc
       }
    }
 
-   double sub_vt[rank * n];
+   // double sub_vt[rank * n];
+   double *sub_vt = new double[rank * n];
    for (int j = 0; j < n; ++j)
    {
       for (int i = 0; i < rank; ++i)
@@ -87,5 +88,6 @@ int pinv(double *A, double *P, const int int_m, const int int_n, double toleranc
    delete[] s;
    delete[] vt;
    delete[] u;
+   delete[] sub_vt;
    return 0;
 }

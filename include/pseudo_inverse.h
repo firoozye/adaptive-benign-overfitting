@@ -1,9 +1,8 @@
 #pragma once
 
-// int pinv(double* A, double* A_inv, int m, int n, double tolerance = 1e-10);
-
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
 #include <cblas.h>
