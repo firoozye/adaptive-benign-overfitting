@@ -30,6 +30,24 @@ bin/
 
 ---
 
+## Large files (Git LFS)
+
+This repository uses **Git Large File Storage (LFS)** for datasets.
+
+Before cloning, make sure Git LFS is installed:
+
+```bash
+git lfs install
+```
+
+After cloning, fetch the data files with:
+
+```bash
+git lfs pull
+```
+
+---
+
 ## Quick Start
 
 Run the best-performing EUR/USD configuration:
