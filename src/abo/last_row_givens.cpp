@@ -66,8 +66,10 @@ namespace givens
 
       double *Q = abo->Q_;
       double *R = abo->R_;
+      double *G = abo->G_;
 
-      double G[n_obs * n_obs] = {0};
+      // double G[n_obs * n_obs] = {0};
+      std::fill(G, G + n_obs * n_obs, 0.0);
       for (int i = 0; i < n_obs; i++)
       {
          G[i * n_obs + i] = 1;
@@ -96,18 +98,46 @@ namespace givens
          drot_(&n_obs, &G[idx_1], &row_stride,
                &G[idx_2], &row_stride, &c, &s);
 
-         int n = dim - i + 1; // rotate across all columns 0..dim-1
-         int inc = n_obs;     // step to next column at same row (column-major)
-         drot_(&n,
-               &R[(i - 1) * n_obs + i - 1], &inc, // R(i-1, 0)
-               &R[(i - 1) * n_obs + i], &inc,     // R(i,   0)
-               &c, &s);
+         if (dim > n_obs)
+         {
+            int n = dim - i + 1; // rotate across all columns 0..dim-1
+            int inc = n_obs;     // step to next column at same row (column-major)
+            drot_(&n,
+                  &R[(i - 1) * n_obs + i - 1], &inc, // R(i-1, 0)
+                  &R[(i - 1) * n_obs + i], &inc,     // R(i,   0)
+                  &c, &s);
 
-         inc = 1;
-         abo->giv_rots.push_back({(i - 1) * dim, i * dim, c, s});
+            inc = 1;
+            abo->giv_rots.push_back({(i - 1) * dim, i * dim, c, s});
+         }
       }
 
-      for (int t = 0; t < n_obs; t++)
-         abo->G_e_1_[t] = G[t];
+      if (dim > n_obs)
+      {
+         for (int t = 0; t < n_obs; t++)
+         {
+            abo->G_e_1_[t] = G[t];
+         }
+      }
+      else
+      {
+         if (Q[0] < 0)
+         {
+            for (int i = 0; i < n_obs * n_obs; ++i)
+            {
+               Q[i] *= -1;
+               G[i] *= -1;
+            }
+         }
+         for (int t = 0; t < n_obs; t++)
+         {
+            abo->G_e_1_[t] = G[t];
+         }
+         double *result = new double[n_obs * dim];
+         cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans,
+                     n_obs, dim, n_obs, 1, G, n_obs, R, n_obs, 0, result, n_obs);
+         std::memcpy(R, result, n_obs * dim * sizeof(double));
+         delete[] result;
+      }
    }
 } // namespace givens

@@ -14,6 +14,7 @@ def run_cpp(
     window: int,
     sigma: float,
     kfolds: int,
+    model_name: str,
     extra_args: list[str],
 ) -> Tuple[float, float]:
     cmd = [
@@ -22,6 +23,7 @@ def run_cpp(
         "--window", str(window),
         "--sigma", str(sigma),
         "--kfolds", str(kfolds),
+        "--model_name", str(model_name),
         *extra_args,
     ]
 
@@ -80,9 +82,11 @@ def append_trial_csv(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--bin", required=True, help="Path to C++ binary, e.g. ./gridsearch_test")
+    parser.add_argument("--model_name", type=str, default="abo")
     parser.add_argument("--n_trials", type=int, default=200)
     parser.add_argument("--kfolds", type=int, default=3)
-
+    parser.add_argument("--lags", type=int, required=True, help="Fixed lag size (int)")
+    
     parser.add_argument("--storage", default="", help="e.g. sqlite:///optuna.db (optional)")
     parser.add_argument("--study_name", default="abo_hpo")
     parser.add_argument("--seed", type=int, default=123)
@@ -92,13 +96,13 @@ def main():
     parser.add_argument("--penalty", type=float, default=1000.0)
 
     # Search spaces
-    parser.add_argument("--lags_min", type=int, default=24)
-    parser.add_argument("--lags_max", type=int, default=144)
-    parser.add_argument("--lags_step", type=int, default=24)
+    #parser.add_argument("--lags_min", type=int, default=2)
+    #parser.add_argument("--lags_max", type=int, default=144)
+    #parser.add_argument("--lags_step", type=int, default=1)
 
-    parser.add_argument("--window_min", type=int, default=192)
+    parser.add_argument("--window_min", type=int, default=21)
     parser.add_argument("--window_max", type=int, default=768)
-    parser.add_argument("--window_step", type=int, default=48)
+    parser.add_argument("--window_step", type=int, default=5)
 
     parser.add_argument("--sigma_min", type=float, default=0.5)
     parser.add_argument("--sigma_max", type=float, default=10.0)
@@ -131,16 +135,16 @@ def main():
         study = optuna.create_study(direction="minimize", sampler=sampler)
 
     def objective(trial: optuna.Trial) -> float:
-        lags = trial.suggest_int(
-            "lags",
-            args.lags_min,
-            args.lags_max,
-            step=args.lags_step,
-        )
+        #lags = trial.suggest_int(
+        #    "lags",
+        #    args.lags_min,
+        #    args.lags_max,
+        #    step=args.lags_step,
+        #)
 
         window = trial.suggest_int(
-            "window",
-            max(args.window_min, 4 * lags),
+         "window",
+         args.window_min,
             args.window_max,
             step=args.window_step,
         )
@@ -153,10 +157,11 @@ def main():
 
         mean_mse, mean_var = run_cpp(
             bin_path=args.bin,
-            lags=lags,
+            lags=args.lags,
             window=window,
             sigma=sigma,
             kfolds=args.kfolds,
+            model_name=args.model_name,
             extra_args=extra_args,
         )
 
@@ -173,7 +178,7 @@ def main():
         # Terminal log line (one per trial)
         print(
             f"trial={trial.number}\t"
-            f"lags={lags}\twindow={window}\tsigma={sigma:.6g}\t"
+            f"lags={args.lags}\twindow={window}\tsigma={sigma:.6g}\t"
             f"mse={mean_mse:.6g}\tvar={mean_var:.6g}\tobj={objective_value:.6g}",
             flush=True,
         )
@@ -183,7 +188,7 @@ def main():
             append_trial_csv(
                 path=args.trial_csv,
                 trial_number=trial.number,
-                lags=lags,
+                lags=args.lags,
                 window=window,
                 sigma=sigma,
                 mean_mse=mean_mse,

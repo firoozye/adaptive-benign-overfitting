@@ -38,7 +38,7 @@ int main()
    target_data = read_csv_func("data/target_non_linear_ts.csv");
    vector<double> close_price;
    vector<double> ret_price;
-   int num_it_samples = 1000;
+   // int num_it_samples = 10000;
    int len_data_set = data_set.size() - 1;
    // int idx_close_col = 4;
 
@@ -75,6 +75,7 @@ int main()
    {
       for (int j = 0; j < num_cols; ++j)
       {
+         // close_lag_mat(i - 1, j) = stod(data_set[i][j]);
          close_lag_mat(i - 1, j) = stod(data_set[i][j]);
       }
    }
@@ -88,10 +89,11 @@ int main()
    vector<double> all_cond_num_mean_array;
    vector<double> all_cond_num_var_array;
 
-   for (int idx_rff = 1; idx_rff < 15; idx_rff++)
+   // for (int idx_rff = 1; idx_rff < 15; idx_rff++)
+   for (int idx_rff = 2; idx_rff < 128; idx_rff++)
    {
-      int D = pow(2, idx_rff);
-      // int D = pow(2, 14);
+      // int D = pow(2, idx_rff);
+      int D = idx_rff;
       double kernel_var = 1.0;
       // double kernel_var = 1.0 / 4.0;
       // double kernel_var = 1.0 / 2.0;
@@ -113,14 +115,13 @@ int main()
       int max_obs = num_rows;
       // double ff = 1.0;
       double ff = .9;
-      double lambda = 0.1;
       ABO abo(X, y, max_obs, ff, D, max_obs);
 
       vector<double> preds;
       vector<double> mse;
-      vector<double> cond_nums;
+      // vector<double> cond_nums;
       double all_mse = 0;
-      double all_cond_nums = 0;
+      // double all_cond_nums = 0;
 
       double X_update[D];
 
@@ -133,21 +134,21 @@ int main()
             X_update[i] = X_update_old(0, i);
          }
 
-         preds.push_back(abo.pred(X_update));
+         // preds.push_back(abo.pred(X_update));
          abo.update(X_update, y_update[i]);
 
-         // preds.push_back(qr_rls.pred(X_update));
+         preds.push_back(abo.pred(X_update));
          double temp_res = pow(preds[i] - y_update[i], 2);
          mse.push_back(temp_res);
          all_mse += temp_res;
 
-         // double temp_cond_num = qr_rls.get_cond_num();
+         // double temp_cond_num = abo.get_cond_num();
          // cond_nums.push_back(temp_cond_num);
          // all_cond_nums += temp_cond_num;
       }
 
       double var = 0;
-      double var_cond_nums = 0;
+      // double var_cond_nums = 0;
       double real_mse = all_mse / n_its;
       // double mean_cond_num = all_cond_nums / n_its;
       for (int i = 0; i < n_its; i++)
@@ -175,12 +176,12 @@ int main()
       delete[] X;
    }
    // save as column
-   // saveVectorToCSV(all_mse_array, "dd_train_res_mse.csv", false);
-   // saveVectorToCSV(all_var_array, "dd_train_res_var.csv", false);
-   // saveVectorToCSV(all_cond_num_mean_array, "cond_num_mean.csv", false);
-   // saveVectorToCSV(all_cond_num_var_array, "cond_num_var.csv", false);
-   saveVectorToCSV(all_mse_array, "dd_test_mse.csv", false);
-   saveVectorToCSV(all_var_array, "dd_test_var.csv", false);
+   saveVectorToCSV(all_mse_array, "dd_train_res_mse_more_points.csv", false);
+   saveVectorToCSV(all_var_array, "dd_train_res_var_more_points.csv", false);
+   // saveVectorToCSV(all_cond_num_mean_array, "cond_num_mean_ff_9.csv", false);
+   // saveVectorToCSV(all_cond_num_var_array, "cond_num_var_ff_9.csv", false);
+   //  saveVectorToCSV(all_mse_array, "dd_test_mse_ff_9.csv", false);
+   //  saveVectorToCSV(all_var_array, "dd_test_var_ff_9.csv", false);
 
    return 0;
 };
