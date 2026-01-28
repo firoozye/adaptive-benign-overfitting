@@ -6,56 +6,229 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstring>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <numeric>
+#include <stdexcept>
 #include <string>
 #include <vector>
-
-using namespace std;
 
 using Clock = std::chrono::steady_clock;
 
 static inline double ns_to_us(double ns) { return ns / 1000.0; }
 static inline double ns_to_s(double ns) { return ns / 1e9; }
 
-struct ValMetrics
+struct ModelParamsABO
 {
-   double mse_abo = 0.0, var_abo = 0.0;
-   double mse_qrd = 0.0, var_qrd = 0.0;
-   double mse_krls = 0.0, var_krls = 0.0;
-
-   // timing (microseconds per update)
-   double us_rff_transform = 0.0;
-   double us_abo_pred_update = 0.0; // ABO only (excluding RFF transform)
-   double us_qrd_update = 0.0;
-   double us_krls_update = 0.0;
-
-   // totals (seconds)
-   double s_rff_transform = 0.0;
-   double s_abo_pred_update = 0.0;
-   double s_qrd_update = 0.0;
-   double s_krls_update = 0.0;
+   int L = -1, W = -1;
+   double sigma = -1.0;
+   int D = 2048;
+   int log2D = -1;
+   double ff = 1.0;
+   double regularizer = 1e-2;
 };
 
-struct RunResult
+struct ModelParamsQRD
 {
-   int k = 0;
-   double s = 0.0;
+   int L = -1, W = -1;
+   double ff = 1.0;
+   double regularizer = 1e-2;
+};
+
+struct ModelParamsKRLS
+{
+   int L = -1, W = -1;
+   double sigma = -1.0;
+   double ff = 1.0;
+   double regularizer = 1e-2;
+};
+
+struct CommonParams
+{
+   int first_date = 672 * 8;
+   int start_k = 0;
+   int end_k = 5; // exclusive
+   int val_length = 672 * 2;
+   int warmup = 50;
+   std::string out_csv = "results/gridsearch/electricity/best_test.csv";
+
+   bool run_abo = true;
+   bool run_qrd = true;
+   bool run_krls = true;
+};
+
+struct Args
+{
+   CommonParams common;
+   ModelParamsABO abo;
+   ModelParamsQRD qrd;
+   ModelParamsKRLS krls;
+};
+
+struct FoldResultRow
+{
+   int fold = 0;
+   std::string model;
+
    int L = 0, W = 0;
+   double sigma = std::numeric_limits<double>::quiet_NaN();
+   int D = 0;
 
-   double mse_abo = 0.0, var_abo = 0.0;
-   double mse_qrd = 0.0, var_qrd = 0.0;
-   double mse_krls = 0.0, var_krls = 0.0;
+   double mse = std::numeric_limits<double>::quiet_NaN();
+   double var = std::numeric_limits<double>::quiet_NaN();
 
-   // timing (avg microseconds/update)
-   double us_rff = 0.0;
-   double us_abo = 0.0;
-   double us_qrd = 0.0;
-   double us_krls = 0.0;
+   double us_rff = 0.0; // ABO only
+   double us_update = 0.0;
+
+   double s_rff = 0.0;
+   double s_update = 0.0;
 };
 
-void lag_matrix(
+static inline bool is_flag(const char *a, const char *b)
+{
+   return std::strcmp(a, b) == 0;
+}
+
+static inline void parse_args(int argc, char **argv, Args &a)
+{
+   for (int i = 1; i < argc; ++i)
+   {
+      auto need = [&](const char *flag)
+      {
+         if (i + 1 >= argc)
+            throw std::runtime_error(std::string("Missing value for ") + flag);
+      };
+
+      // ---- common ----
+      if (is_flag(argv[i], "--first_date"))
+      {
+         need("--first_date");
+         a.common.first_date = std::stoi(argv[++i]);
+      }
+      else if (is_flag(argv[i], "--start_k"))
+      {
+         need("--start_k");
+         a.common.start_k = std::stoi(argv[++i]);
+      }
+      else if (is_flag(argv[i], "--end_k"))
+      {
+         need("--end_k");
+         a.common.end_k = std::stoi(argv[++i]);
+      }
+      else if (is_flag(argv[i], "--val_length"))
+      {
+         need("--val_length");
+         a.common.val_length = std::stoi(argv[++i]);
+      }
+      else if (is_flag(argv[i], "--warmup"))
+      {
+         need("--warmup");
+         a.common.warmup = std::stoi(argv[++i]);
+      }
+      else if (is_flag(argv[i], "--out_csv"))
+      {
+         need("--out_csv");
+         a.common.out_csv = argv[++i];
+      }
+      else if (is_flag(argv[i], "--run"))
+      {
+         need("--run");
+         std::string s = argv[++i];
+         auto has = [&](const std::string &key)
+         { return s.find(key) != std::string::npos; };
+         a.common.run_abo = has("abo");
+         a.common.run_qrd = has("qrd");
+         a.common.run_krls = has("krls");
+      }
+
+      // ---- ABO ----
+      else if (is_flag(argv[i], "--abo_lags"))
+      {
+         need("--abo_lags");
+         a.abo.L = std::stoi(argv[++i]);
+      }
+      else if (is_flag(argv[i], "--abo_window"))
+      {
+         need("--abo_window");
+         a.abo.W = std::stoi(argv[++i]);
+      }
+      else if (is_flag(argv[i], "--abo_sigma"))
+      {
+         need("--abo_sigma");
+         a.abo.sigma = std::stod(argv[++i]);
+      }
+      else if (is_flag(argv[i], "--abo_D"))
+      {
+         need("--abo_D");
+         a.abo.D = std::stoi(argv[++i]);
+      }
+      else if (is_flag(argv[i], "--abo_log2D"))
+      {
+         need("--abo_log2D");
+         a.abo.log2D = std::stoi(argv[++i]);
+      }
+
+      // ---- QRD ----
+      else if (is_flag(argv[i], "--qrd_lags"))
+      {
+         need("--qrd_lags");
+         a.qrd.L = std::stoi(argv[++i]);
+      }
+      else if (is_flag(argv[i], "--qrd_window"))
+      {
+         need("--qrd_window");
+         a.qrd.W = std::stoi(argv[++i]);
+      }
+
+      // ---- KRLS ----
+      else if (is_flag(argv[i], "--krls_lags"))
+      {
+         need("--krls_lags");
+         a.krls.L = std::stoi(argv[++i]);
+      }
+      else if (is_flag(argv[i], "--krls_window"))
+      {
+         need("--krls_window");
+         a.krls.W = std::stoi(argv[++i]);
+      }
+      else if (is_flag(argv[i], "--krls_sigma"))
+      {
+         need("--krls_sigma");
+         a.krls.sigma = std::stod(argv[++i]);
+      }
+   }
+
+   if (a.abo.log2D >= 0)
+      a.abo.D = 1 << a.abo.log2D;
+
+   if (a.common.end_k <= a.common.start_k)
+      throw std::runtime_error("--end_k must be > --start_k");
+
+   if (!a.common.run_abo && !a.common.run_qrd && !a.common.run_krls)
+      throw std::runtime_error("--run must include at least one of: abo,qrd,krls");
+
+   if (a.common.run_abo)
+   {
+      if (a.abo.L <= 0 || a.abo.W <= 0 || a.abo.sigma <= 0.0 || a.abo.D <= 0)
+         throw std::runtime_error("ABO needs --abo_lags --abo_window --abo_sigma and --abo_D/--abo_log2D");
+   }
+   if (a.common.run_qrd)
+   {
+      if (a.qrd.L <= 0 || a.qrd.W <= 0)
+         throw std::runtime_error("QRD needs --qrd_lags --qrd_window");
+   }
+   if (a.common.run_krls)
+   {
+      if (a.krls.L <= 0 || a.krls.W <= 0 || a.krls.sigma <= 0.0)
+         throw std::runtime_error("KRLS needs --krls_lags --krls_window --krls_sigma");
+   }
+}
+
+// ---- helpers (same logic as your code) ----
+
+static inline void lag_matrix(
     const std::vector<double> &x,
     int lag,
     std::vector<std::vector<double>> &X_lag,
@@ -77,59 +250,26 @@ void lag_matrix(
    {
       for (int j = 0; j < lag; ++j)
          X_lag[i][j] = x[i + j];
-
       y[i] = x[i + lag];
    }
 }
 
-void saveRunResultsToCSV(const std::vector<RunResult> &results,
-                         const std::string &filename)
+static inline void dataset_creation(
+    std::vector<std::vector<double>> &data_set,
+    std::vector<double> &target_data,
+    Eigen::MatrixXd &initial_matrix,
+    Eigen::MatrixXd &update_matrix,
+    double *y,
+    double *&y_update,
+    int num_rows,
+    int num_cols,
+    int start_row)
 {
-   std::ofstream file(filename);
-   if (!file)
-   {
-      std::cerr << "Error opening file: " << filename << std::endl;
-      return;
-   }
+   const int remaining = static_cast<int>(target_data.size()) - start_row;
+   const int num_elements = remaining - num_rows;
 
-   // ---- header ----
-   file << "k,s,L,W,"
-        << "mse_abo,var_abo,"
-        << "mse_qrd,var_qrd,"
-        << "mse_krls,var_krls,"
-        << "us_rff,us_abo,us_qrd,us_krls\n";
-
-   // ---- rows ----
-   for (const auto &r : results)
-   {
-      file << r.k << "," << r.s << "," << r.L << "," << r.W << ","
-           << r.mse_abo << "," << r.var_abo << ","
-           << r.mse_qrd << "," << r.var_qrd << ","
-           << r.mse_krls << "," << r.var_krls << ","
-           << r.us_rff << "," << r.us_abo << "," << r.us_qrd << "," << r.us_krls
-           << "\n";
-   }
-
-   file.close();
-}
-
-void dataset_creation(std::vector<std::vector<double>> &data_set,
-                      std::vector<double> &target_data,
-                      Eigen::MatrixXd &initial_matrix,
-                      Eigen::MatrixXd &update_matrix,
-                      int &d,
-                      double *y,
-                      double *&y_update,
-                      int num_rows,
-                      int num_cols,
-                      int start_row)
-{
-   (void)d; // d is redundant here, but kept to match your signature
-
-   const int num_elements = static_cast<int>(target_data.size()) - num_rows - start_row;
    if (num_elements <= 0)
    {
-      std::cerr << "dataset_creation: not enough target_data for the requested split.\n";
       y_update = nullptr;
       initial_matrix.resize(0, 0);
       update_matrix.resize(0, 0);
@@ -150,7 +290,6 @@ void dataset_creation(std::vector<std::vector<double>> &data_set,
    const int n_rows_mat = len_data_set - start_row;
    if (n_rows_mat <= num_rows)
    {
-      std::cerr << "dataset_creation: not enough rows in data_set after start_row.\n";
       initial_matrix.resize(0, 0);
       update_matrix.resize(0, 0);
       return;
@@ -165,278 +304,494 @@ void dataset_creation(std::vector<std::vector<double>> &data_set,
    update_matrix = close_lag_mat.block(num_rows, 0, close_lag_mat.rows() - num_rows, num_cols);
 }
 
-void get_var(const std::vector<double> &mse, double real_mse, double &var, int n_its)
+static inline void get_var(const std::vector<double> &se, double mean_se, double &var, int n)
 {
    var = 0.0;
-   for (int i = 0; i < n_its; i++)
+   for (int i = 0; i < n; ++i)
    {
-      const double temp = mse[i] - real_mse;
-      var += temp * temp;
+      double t = se[i] - mean_se;
+      var += t * t;
    }
 }
 
-ValMetrics cross_val(int first_date, int num_rows, int num_cols, double sigma, int k_fold)
+// ---- data loader (shared) ----
+
+struct RawSeries
+{
+   std::vector<double> x;
+};
+
+static inline RawSeries load_series()
+{
+   RawSeries s;
+   std::vector<std::vector<std::string>> raw_data =
+       read_csv_func("data/electricity/raw_norm_LD2011_2014.csv");
+
+   const int len_raw_data = static_cast<int>(raw_data.size()) - 1;
+   s.x.reserve(std::max(0, len_raw_data - 1));
+   for (int i = 1; i < len_raw_data; ++i)
+      s.x.push_back(std::stod(raw_data[i][0]));
+   return s;
+}
+
+// ---- per-model fold runners ----
+
+static inline FoldResultRow run_fold_abo(
+    const RawSeries &series,
+    int first_date,
+    int fold_k,
+    int W, int L,
+    double sigma,
+    int D,
+    int val_length,
+    int warmup,
+    double ff,
+    double regularizer)
 {
    using MatrixXd = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>;
 
+   FoldResultRow row;
+   row.fold = fold_k;
+   row.model = "ABO";
+   row.L = L;
+   row.W = W;
+   row.sigma = sigma;
+   row.D = D;
+
    std::vector<std::vector<double>> data_set;
    std::vector<double> target_data;
+   lag_matrix(series.x, L, data_set, target_data);
 
-   // ---- read raw data (expects your dd_test.h provides read_csv_func) ----
-   std::vector<std::vector<std::string>> raw_data = read_csv_func("data/electricity/raw_norm_LD2011_2014.csv");
-
-   std::vector<double> raw_data_dob;
-   const int len_raw_data = static_cast<int>(raw_data.size()) - 1;
-   raw_data_dob.reserve(std::max(0, len_raw_data - 1));
-
-   for (int i = 1; i < len_raw_data; ++i)
-      raw_data_dob.push_back(std::stod(raw_data[i][0]));
-
-   const int lags = num_cols;
-   lag_matrix(raw_data_dob, lags, data_set, target_data);
-
-   Eigen::MatrixXd initial_matrix;
-   Eigen::MatrixXd update_matrix;
-
-   const int d = num_cols;
-
-   // NOTE: variable-length arrays are non-standard in C++ -> use vector
-   std::vector<double> y_vec(num_rows);
+   MatrixXd initial_matrix, update_matrix;
+   std::vector<double> y_vec(W);
    double *y = y_vec.data();
-
    double *y_update = nullptr;
 
-   const int val_length = 672 * 2; // MUST be int for loop bounds
-   const int start_date = first_date + val_length * k_fold;
+   const int start_row = first_date + val_length * fold_k;
 
-   dataset_creation(data_set, target_data,
-                    initial_matrix, update_matrix,
-                    (int &)d, y, y_update,
-                    num_rows, num_cols,
-                    start_date);
+   dataset_creation(data_set, target_data, initial_matrix, update_matrix,
+                    y, y_update, W, L, start_row);
 
-   ValMetrics m;
    if (y_update == nullptr || update_matrix.rows() < val_length)
    {
-      std::cerr << "cross_val: dataset_creation failed or update_matrix too short.\n";
       delete[] y_update;
-      return m;
+      return row;
    }
 
-   // ---- RFF setup ----
-   const int D = static_cast<int>(std::pow(2.0, 11.0));
-   // int D = 4;
-   const double kernel_var = sigma;
    const bool seed = true;
-
-   GaussianRFF g_rff(d, D, kernel_var, seed);
+   GaussianRFF g_rff(L, D, sigma, seed);
 
    MatrixXd X_old = g_rff.transform_matrix(initial_matrix);
-
-   std::vector<double> X(static_cast<size_t>(num_rows) * static_cast<size_t>(D));
+   std::vector<double> X(static_cast<size_t>(W) * static_cast<size_t>(D));
    for (int j = 0; j < D; ++j)
-      for (int i = 0; i < num_rows; ++i)
-         X[static_cast<size_t>(i) + static_cast<size_t>(j) * static_cast<size_t>(num_rows)] = X_old(i, j);
+      for (int i = 0; i < W; ++i)
+         X[static_cast<size_t>(i) + static_cast<size_t>(j) * static_cast<size_t>(W)] = X_old(i, j);
 
-   // ---- models ----
-   const int max_obs = num_rows;
-   const double ff = 1.0;
-   const double regularizer = 1e-2;
+   ABO abo(X.data(), y, W, ff, D, W);
 
-   // ABO
-   ABO abo(X.data(), y, max_obs, ff, D, num_rows);
+   std::vector<double> se;
+   se.reserve(val_length);
 
-   // No-RFF input for windowed methods
-   std::vector<double> X_no_rff(static_cast<size_t>(num_rows) * static_cast<size_t>(d));
-   for (int j = 0; j < d; ++j)
-      for (int i = 0; i < num_rows; ++i)
-         X_no_rff[static_cast<size_t>(i) + static_cast<size_t>(j) * static_cast<size_t>(num_rows)] = initial_matrix(i, j);
+   std::vector<double> X_update(static_cast<size_t>(D));
 
-   // QRD-RLS
-   QRDRLS qrd_rls(num_rows, num_cols, ff, regularizer);
-   qrd_rls.batchInitialize(X_no_rff.data(), y, num_rows, num_cols);
-
-   // KRLS-RBF
-   const double temp_sigma = 1.0 / kernel_var;
-   KRLS_RBF krls_rbf(X_no_rff.data(), y, num_rows, num_cols, regularizer, temp_sigma, num_rows);
-
-   // ---- metrics storage ----
-   std::vector<double> mse_abo;
-   std::vector<double> mse_qrd_rls;
-   std::vector<double> mse_k_rls;
-   mse_abo.reserve(val_length);
-   mse_qrd_rls.reserve(val_length);
-   mse_k_rls.reserve(val_length);
-
-   double all_mse_abo = 0.0;
-   double all_mse_qrd_rls = 0.0;
-   double all_mse_k_rls = 0.0;
-
-   // ---- timing accumulators ----
    double ns_rff = 0.0;
-   double ns_abo = 0.0;
-   double ns_qrd = 0.0;
-   double ns_krls = 0.0;
-
-   const int warmup = 50;
-
-   std::vector<double> X_update(D);
-   std::vector<double> x_no_rff(d);
+   double ns_update = 0.0;
+   double se_sum = 0.0;
 
    const int n_its = val_length;
+   const int eff_its = std::max(1, n_its - warmup);
 
-   for (int i = 0; i < n_its; i++)
+   for (int i = 0; i < n_its; ++i)
    {
-      // (A) RFF transform timing (warmup-consistent)
       auto t0 = Clock::now();
-      MatrixXd X_update_old = g_rff.transform(update_matrix.row(i));
+      MatrixXd X_up = g_rff.transform(update_matrix.row(i));
       auto t1 = Clock::now();
       if (i >= warmup)
          ns_rff += std::chrono::duration<double, std::nano>(t1 - t0).count();
 
       for (int j = 0; j < D; ++j)
-         X_update[j] = X_update_old(0, j);
+         X_update[static_cast<size_t>(j)] = X_up(0, j);
 
-      // (B) ABO pred+update timing (excluding transform)
-      double temp_pred = 0.0;
+      double pred = 0.0;
       t0 = Clock::now();
-      temp_pred = abo.pred(X_update.data());
+      pred = abo.pred(X_update.data());
       abo.update(X_update.data(), y_update[i]);
       t1 = Clock::now();
       if (i >= warmup)
-         ns_abo += std::chrono::duration<double, std::nano>(t1 - t0).count();
+         ns_update += std::chrono::duration<double, std::nano>(t1 - t0).count();
 
-      double temp_res = (temp_pred - y_update[i]);
-      temp_res *= temp_res;
-      all_mse_abo += temp_res;
-      mse_abo.push_back(temp_res);
-
-      // build x_no_rff (not timed)
-      for (int j = 0; j < d; ++j)
-         x_no_rff[j] = update_matrix(i, j);
-
-      // (C) QRD-RLS update timing
-      double pred = 0.0;
-      double eps_post = 0.0;
-
-      t0 = Clock::now();
-      qrd_rls.update(x_no_rff.data(), y_update[i], pred, eps_post);
-      t1 = Clock::now();
-      if (i >= warmup)
-         ns_qrd += std::chrono::duration<double, std::nano>(t1 - t0).count();
-
-      temp_res = eps_post * eps_post;
-      all_mse_qrd_rls += temp_res;
-      mse_qrd_rls.push_back(temp_res);
-
-      // (D) KRLS update timing
-      t0 = Clock::now();
-      krls_rbf.update(x_no_rff.data(), y_update[i], pred, eps_post);
-      t1 = Clock::now();
-      if (i >= warmup)
-         ns_krls += std::chrono::duration<double, std::nano>(t1 - t0).count();
-
-      temp_res = eps_post * eps_post;
-      all_mse_k_rls += temp_res;
-      mse_k_rls.push_back(temp_res);
+      double e = pred - y_update[i];
+      double r2 = e * e;
+      se_sum += r2;
+      se.push_back(r2);
    }
 
-   const int effective_its = std::max(1, n_its - warmup);
+   row.s_rff = ns_to_s(ns_rff);
+   row.s_update = ns_to_s(ns_update);
+   row.us_rff = ns_to_us(ns_rff / eff_its);
+   row.us_update = ns_to_us(ns_update / eff_its);
 
-   m.s_rff_transform = ns_to_s(ns_rff);
-   m.s_abo_pred_update = ns_to_s(ns_abo);
-   m.s_qrd_update = ns_to_s(ns_qrd);
-   m.s_krls_update = ns_to_s(ns_krls);
+   const double mean_se = se_sum / n_its;
+   double var_se = 0.0;
+   get_var(se, mean_se, var_se, n_its);
 
-   m.us_rff_transform = ns_to_us(ns_rff / effective_its);
-   m.us_abo_pred_update = ns_to_us(ns_abo / effective_its);
-   m.us_qrd_update = ns_to_us(ns_qrd / effective_its);
-   m.us_krls_update = ns_to_us(ns_krls / effective_its);
-
-   cout << "\n--- Timing (avg us/update) ---\n";
-   cout << "RFF transform:        " << m.us_rff_transform << " us\n";
-   cout << "ABO pred+update:      " << m.us_abo_pred_update << " us\n";
-   cout << "ABO end-to-end:       " << (m.us_rff_transform + m.us_abo_pred_update) << " us\n";
-   cout << "QRD-RLS update:       " << m.us_qrd_update << " us\n";
-   cout << "KRLS-RBF update:      " << m.us_krls_update << " us\n";
-   cout << "----------------------------\n";
-
-   // ---- compute MSE/VAR ----
-   const double real_mse_abo = all_mse_abo / n_its;
-   const double real_mse_qrd_rls = all_mse_qrd_rls / n_its;
-   const double real_mse_k_rls = all_mse_k_rls / n_its;
-
-   double var_abo = 0.0, var_qrd_rls = 0.0, var_k_rls = 0.0;
-   get_var(mse_abo, real_mse_abo, var_abo, n_its);
-   get_var(mse_qrd_rls, real_mse_qrd_rls, var_qrd_rls, n_its);
-   get_var(mse_k_rls, real_mse_k_rls, var_k_rls, n_its);
-
-   cout << "Number of RFF: " << D << endl;
-   cout << "ResMSE_abo: " << real_mse_abo << endl;
-   cout << "ResVAR_abo: " << var_abo / (n_its - 1) << endl;
-   cout << "ResMSE_qrd_rls: " << real_mse_qrd_rls << endl;
-   cout << "ResVAR_qrd_rls: " << var_qrd_rls / (n_its - 1) << endl;
-   cout << "ResMSE_k_rls: " << real_mse_k_rls << endl;
-   cout << "ResVAR_k_rls: " << var_k_rls / (n_its - 1) << endl;
-
-   m.mse_abo = real_mse_abo;
-   m.var_abo = var_abo / (n_its - 1);
-
-   m.mse_qrd = real_mse_qrd_rls;
-   m.var_qrd = var_qrd_rls / (n_its - 1);
-
-   m.mse_krls = real_mse_k_rls;
-   m.var_krls = var_k_rls / (n_its - 1);
+   row.mse = mean_se;
+   row.var = var_se / (n_its - 1);
 
    delete[] y_update;
-   return m;
+   return row;
 }
 
-int main()
+static inline FoldResultRow run_fold_qrd(
+    const RawSeries &series,
+    int first_date,
+    int fold_k,
+    int W, int L,
+    int val_length,
+    int warmup,
+    double ff,
+    double regularizer)
 {
-   // we used 3 k folds, for test we will use 3
-   int start = 0;
-   int end = 3; // exclusive
-   // there were 0,1,2 k folds
-   int first_date = 672 * 3;
+   FoldResultRow row;
+   row.fold = fold_k;
+   row.model = "QRD-RLS";
+   row.L = L;
+   row.W = W;
+   row.D = 0;
 
-   std::vector<int> k_folds(end - start);
-   std::iota(k_folds.begin(), k_folds.end(), start);
-   std::vector<int> lags = {96};
-   std::vector<int> windows = {192};
-   double sigma = 6.9;
+   std::vector<std::vector<double>> data_set;
+   std::vector<double> target_data;
+   lag_matrix(series.x, L, data_set, target_data);
 
-   int c = 0;
-   std::vector<RunResult> results;
+   Eigen::MatrixXd initial_matrix, update_matrix;
+   std::vector<double> y_vec(W);
+   double *y = y_vec.data();
+   double *y_update = nullptr;
 
-   for (int k : k_folds)
+   const int start_row = first_date + val_length * fold_k;
+
+   dataset_creation(data_set, target_data, initial_matrix, update_matrix,
+                    y, y_update, W, L, start_row);
+
+   if (y_update == nullptr || update_matrix.rows() < val_length)
    {
-      for (int L : lags)
+      delete[] y_update;
+      return row;
+   }
+
+   std::vector<double> X_no_rff(static_cast<size_t>(W) * static_cast<size_t>(L));
+   for (int j = 0; j < L; ++j)
+      for (int i = 0; i < W; ++i)
+         X_no_rff[static_cast<size_t>(i) + static_cast<size_t>(j) * static_cast<size_t>(W)] = initial_matrix(i, j);
+
+   QRDRLS qrd(W, L, ff, regularizer);
+   qrd.batchInitialize(X_no_rff.data(), y, W, L);
+
+   std::vector<double> x_no_rff(static_cast<size_t>(L));
+   std::vector<double> se;
+   se.reserve(val_length);
+
+   double ns_update = 0.0;
+   double se_sum = 0.0;
+
+   const int n_its = val_length;
+   const int eff_its = std::max(1, n_its - warmup);
+
+   for (int i = 0; i < n_its; ++i)
+   {
+      for (int j = 0; j < L; ++j)
+         x_no_rff[static_cast<size_t>(j)] = update_matrix(i, j);
+
+      double pred = 0.0, eps_post = 0.0;
+      auto t0 = Clock::now();
+      qrd.update(x_no_rff.data(), y_update[i], pred, eps_post);
+      auto t1 = Clock::now();
+      if (i >= warmup)
+         ns_update += std::chrono::duration<double, std::nano>(t1 - t0).count();
+
+      double r2 = eps_post * eps_post;
+      se_sum += r2;
+      se.push_back(r2);
+   }
+
+   row.s_update = ns_to_s(ns_update);
+   row.us_update = ns_to_us(ns_update / eff_its);
+
+   const double mean_se = se_sum / n_its;
+   double var_se = 0.0;
+   get_var(se, mean_se, var_se, n_its);
+
+   row.mse = mean_se;
+   row.var = var_se / (n_its - 1);
+
+   delete[] y_update;
+   return row;
+}
+
+static inline FoldResultRow run_fold_krls(
+    const RawSeries &series,
+    int first_date,
+    int fold_k,
+    int W, int L,
+    double sigma,
+    int val_length,
+    int warmup,
+    double ff,
+    double regularizer)
+{
+   FoldResultRow row;
+   row.fold = fold_k;
+   row.model = "KRLS-RBF";
+   row.L = L;
+   row.W = W;
+   row.sigma = sigma;
+   row.D = 0;
+
+   std::vector<std::vector<double>> data_set;
+   std::vector<double> target_data;
+   lag_matrix(series.x, L, data_set, target_data);
+
+   Eigen::MatrixXd initial_matrix, update_matrix;
+   std::vector<double> y_vec(W);
+   double *y = y_vec.data();
+   double *y_update = nullptr;
+
+   const int start_row = first_date + val_length * fold_k;
+
+   dataset_creation(data_set, target_data, initial_matrix, update_matrix,
+                    y, y_update, W, L, start_row);
+
+   if (y_update == nullptr || update_matrix.rows() < val_length)
+   {
+      delete[] y_update;
+      return row;
+   }
+
+   std::vector<double> X_no_rff(static_cast<size_t>(W) * static_cast<size_t>(L));
+   for (int j = 0; j < L; ++j)
+      for (int i = 0; i < W; ++i)
+         X_no_rff[static_cast<size_t>(i) + static_cast<size_t>(j) * static_cast<size_t>(W)] = initial_matrix(i, j);
+
+   const double temp_sigma = 1.0 / sigma;
+   KRLS_RBF krls(X_no_rff.data(), y, W, L, regularizer, temp_sigma, W);
+
+   std::vector<double> x_no_rff(static_cast<size_t>(L));
+   std::vector<double> se;
+   se.reserve(val_length);
+
+   double ns_update = 0.0;
+   double se_sum = 0.0;
+
+   const int n_its = val_length;
+   const int eff_its = std::max(1, n_its - warmup);
+
+   for (int i = 0; i < n_its; ++i)
+   {
+      for (int j = 0; j < L; ++j)
+         x_no_rff[static_cast<size_t>(j)] = update_matrix(i, j);
+
+      double pred = 0.0, eps_post = 0.0;
+      auto t0 = Clock::now();
+      krls.update(x_no_rff.data(), y_update[i], pred, eps_post);
+      auto t1 = Clock::now();
+      if (i >= warmup)
+         ns_update += std::chrono::duration<double, std::nano>(t1 - t0).count();
+
+      double r2 = eps_post * eps_post;
+      se_sum += r2;
+      se.push_back(r2);
+   }
+
+   row.s_update = ns_to_s(ns_update);
+   row.us_update = ns_to_us(ns_update / eff_its);
+
+   const double mean_se = se_sum / n_its;
+   double var_se = 0.0;
+   get_var(se, mean_se, var_se, n_its);
+
+   row.mse = mean_se;
+   row.var = var_se / (n_its - 1);
+
+   delete[] y_update;
+   return row;
+}
+
+// ---- CSV output ----
+
+static inline void save_rows_csv(const std::vector<FoldResultRow> &rows, const std::string &path)
+{
+   std::ofstream f(path);
+   if (!f)
+   {
+      std::cerr << "Error opening file: " << path << "\n";
+      return;
+   }
+
+   f << "fold,model,L,W,sigma,D,mse,var,us_rff,us_update,s_rff,s_update\n";
+   for (const auto &r : rows)
+   {
+      f << r.fold << ","
+        << r.model << ","
+        << r.L << ","
+        << r.W << ","
+        << r.sigma << ","
+        << r.D << ","
+        << r.mse << ","
+        << r.var << ","
+        << r.us_rff << ","
+        << r.us_update << ","
+        << r.s_rff << ","
+        << r.s_update
+        << "\n";
+   }
+}
+
+// ---- main ----
+
+int main(int argc, char **argv)
+{
+   Args args;
+   try
+   {
+      parse_args(argc, argv, args);
+   }
+   catch (const std::exception &e)
+   {
+      std::cerr << "Arg error: " << e.what() << "\n\n";
+      std::cerr
+          << "Example:\n"
+          << "  ./best_test \\\n"
+          << "    --run abo,qrd,krls \\\n"
+          << "    --first_date 5376 --start_k 0 --end_k 5 --val_length 1344 --warmup 50 \\\n"
+          << "    --abo_lags 19 --abo_window 20 --abo_sigma 6.50586 --abo_log2D 11 \\\n"
+          << "    --qrd_lags 48 --qrd_window 128 \\\n"
+          << "    --krls_lags 25 --krls_window 261 --krls_sigma 4.2 \\\n"
+          << "    --out_csv results/gridsearch/electricity/best_test.csv\n";
+      return 1;
+   }
+
+   RawSeries series = load_series();
+
+   std::vector<int> folds(args.common.end_k - args.common.start_k);
+   std::iota(folds.begin(), folds.end(), args.common.start_k);
+
+   std::vector<FoldResultRow> rows;
+   rows.reserve(static_cast<size_t>(folds.size()) * 3);
+
+   // model summaries (means over folds)
+   struct Agg
+   {
+      int n = 0;
+      double mse_sum = 0.0, var_sum = 0.0;
+      double us_rff_sum = 0.0, us_update_sum = 0.0;
+   };
+   Agg agg_abo, agg_qrd, agg_krls;
+
+   for (int k : folds)
+   {
+      const int fold_idx = k - args.common.start_k;
+
+      if (args.common.run_abo)
       {
-         for (int W : windows)
-         {
-            cout << "Experiment number: " << c << endl;
-            cout << "Test window: " << k - start << endl;
-            cout << "Lag size: " << L << endl;
-            cout << "Window size: " << W << endl;
+         std::cout << "\n[ABO] fold=" << fold_idx
+                   << " L=" << args.abo.L
+                   << " W=" << args.abo.W
+                   << " sigma=" << args.abo.sigma
+                   << " D=" << args.abo.D
+                   << "\n";
 
-            ValMetrics m = cross_val(first_date, W, L, sigma, k);
+         FoldResultRow r = run_fold_abo(series,
+                                        args.common.first_date, k,
+                                        args.abo.W, args.abo.L,
+                                        args.abo.sigma, args.abo.D,
+                                        args.common.val_length, args.common.warmup,
+                                        args.abo.ff, args.abo.regularizer);
 
-            results.push_back(RunResult{
-                k - start, sigma, L, W,
-                m.mse_abo, m.var_abo,
-                m.mse_qrd, m.var_qrd,
-                m.mse_krls, m.var_krls,
-                m.us_rff_transform,
-                m.us_abo_pred_update,
-                m.us_qrd_update,
-                m.us_krls_update});
+         rows.push_back(r);
+         agg_abo.n++;
+         agg_abo.mse_sum += r.mse;
+         agg_abo.var_sum += r.var;
+         agg_abo.us_rff_sum += r.us_rff;
+         agg_abo.us_update_sum += r.us_update;
+      }
 
-            c++;
-         }
+      if (args.common.run_qrd)
+      {
+         std::cout << "\n[QRD-RLS] fold=" << fold_idx
+                   << " L=" << args.qrd.L
+                   << " W=" << args.qrd.W
+                   << "\n";
+
+         FoldResultRow r = run_fold_qrd(series,
+                                        args.common.first_date, k,
+                                        args.qrd.W, args.qrd.L,
+                                        args.common.val_length, args.common.warmup,
+                                        args.qrd.ff, args.qrd.regularizer);
+
+         rows.push_back(r);
+         agg_qrd.n++;
+         agg_qrd.mse_sum += r.mse;
+         agg_qrd.var_sum += r.var;
+         agg_qrd.us_update_sum += r.us_update;
+      }
+
+      if (args.common.run_krls)
+      {
+         std::cout << "\n[KRLS-RBF] fold=" << fold_idx
+                   << " L=" << args.krls.L
+                   << " W=" << args.krls.W
+                   << " sigma=" << args.krls.sigma
+                   << "\n";
+
+         FoldResultRow r = run_fold_krls(series,
+                                         args.common.first_date, k,
+                                         args.krls.W, args.krls.L,
+                                         args.krls.sigma,
+                                         args.common.val_length, args.common.warmup,
+                                         args.krls.ff, args.krls.regularizer);
+
+         rows.push_back(r);
+         agg_krls.n++;
+         agg_krls.mse_sum += r.mse;
+         agg_krls.var_sum += r.var;
+         agg_krls.us_update_sum += r.us_update;
       }
    }
 
-   saveRunResultsToCSV(results, "results/gridsearch/EURUSD/mse_var_grid_1_best_hyp.csv");
+   save_rows_csv(rows, args.common.out_csv);
+
+   auto mean_or_nan = [](double s, int n)
+   { return (n > 0) ? (s / n) : std::numeric_limits<double>::quiet_NaN(); };
+
+   std::cout << "\nSUMMARY "
+             << "folds=" << (args.common.end_k - args.common.start_k) << " "
+             << "out_csv=" << args.common.out_csv << " ";
+
+   if (args.common.run_abo)
+   {
+      std::cout << "abo(L=" << args.abo.L << ",W=" << args.abo.W << ",sigma=" << args.abo.sigma << ",D=" << args.abo.D << ") "
+                << "mse=" << mean_or_nan(agg_abo.mse_sum, agg_abo.n) << " "
+                << "var=" << mean_or_nan(agg_abo.var_sum, agg_abo.n) << " "
+                << "us_rff=" << mean_or_nan(agg_abo.us_rff_sum, agg_abo.n) << " "
+                << "us_update=" << mean_or_nan(agg_abo.us_update_sum, agg_abo.n) << " ";
+   }
+
+   if (args.common.run_qrd)
+   {
+      std::cout << "qrd(L=" << args.qrd.L << ",W=" << args.qrd.W << ") "
+                << "mse=" << mean_or_nan(agg_qrd.mse_sum, agg_qrd.n) << " "
+                << "var=" << mean_or_nan(agg_qrd.var_sum, agg_qrd.n) << " "
+                << "us_update=" << mean_or_nan(agg_qrd.us_update_sum, agg_qrd.n) << " ";
+   }
+
+   if (args.common.run_krls)
+   {
+      std::cout << "krls(L=" << args.krls.L << ",W=" << args.krls.W << ",sigma=" << args.krls.sigma << ") "
+                << "mse=" << mean_or_nan(agg_krls.mse_sum, agg_krls.n) << " "
+                << "var=" << mean_or_nan(agg_krls.var_sum, agg_krls.n) << " "
+                << "us_update=" << mean_or_nan(agg_krls.us_update_sum, agg_krls.n) << " ";
+   }
+
+   std::cout << "\n";
    return 0;
 }

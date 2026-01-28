@@ -6,10 +6,10 @@
       "type": "cppdbg",
       "request": "launch",
       //"program": "${workspaceFolder}/abo_predict", // Path to your executable
-      //"program": "${workspaceFolder}/bin/dd_test",
+      "program": "${workspaceFolder}/bin/dd_test",
       //"program": "${workspaceFolder}/bin/elect_test",
       //"program": "${workspaceFolder}/bin/gridsearch_test",
-      "program": "${workspaceFolder}/bin/gridsearch_test_best",
+      //"program": "${workspaceFolder}/bin/gridsearch_test_best",
       //"program": "${workspaceFolder}/bin/gridsearch_eurusd_test_best",
       //"program": "${workspaceFolder}/bin/EURUSD_test",
       //"program": "${workspaceFolder}/bin/baseline_qrd_rls_eurusd",
@@ -18,7 +18,12 @@
       //"program": "${workspaceFolder}/bin/baseline_k_rls_eurusd",
       //"program": "${workspaceFolder}/bin/real_cond_num_test",
       //"program": "${workspaceFolder}/bin/timing_test",
-      "args": [], // Command-line arguments
+      "args": [
+        "--n_trials 300",
+        "--lags 20",
+        "--kfolds 8",
+        "--model_name krls"
+      ], // Command-line arguments
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
       "environment": [],

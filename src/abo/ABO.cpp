@@ -23,6 +23,7 @@ ABO::~ABO()
    delete[] z_;
    delete[] beta_;
    delete[] G_e_1_;
+   delete[] G_;
 }
 
 ABO::ABO(double *x_input, double *y_input, int max_obs, double ff, int dim, int n_batch)
@@ -46,6 +47,7 @@ ABO::ABO(double *x_input, double *y_input, int max_obs, double ff, int dim, int 
    y_ = new double[n_obs_]();
    std::memcpy(y_, y_input, n_obs_ * sizeof(double));
    G_e_1_ = new double[max_obs + 1];
+   G_ = new double[(max_obs + 1) * (max_obs + 1)];
 
    batchInitialize();
 }
@@ -57,7 +59,7 @@ void ABO::batchInitialize()
    for (int i = 0; i < n_obs_; i++)
    {
       double pow_n = (n_obs_ - i - 1) / 2.0;
-      double scale = pow(sqrt_ff_, pow_n);
+      double scale = pow(ff_, pow_n);
       for (int j = 0; j < dim_; j++)
       {
          X_[j * n_obs_ + i] *= scale;
@@ -187,11 +189,6 @@ void ABO::downdate()
 {
    // Update matrices
    givens::downdate(this);
-   // double x_T[dim_];
-   // for (int i = 0; i < dim_; ++i)
-   //{
-   //    x_T[i] = R_[n_obs_ * i]; // Copy the first row=
-   // }
    double *x_T = R_; // pointer to first row
 
    // Deletion for new regime
@@ -203,8 +200,6 @@ void ABO::downdate()
       // G_e_1_ is declared in givens downdate. G e_1
       cblas_dgemv(CblasColMajor, CblasNoTrans,
                   dim_, n_obs_, 1.0, R_inv_, dim_, G_e_1_, 1, 0.0, k, 1);
-      // cblas_dgemv(CblasColMajor, CblasTrans,
-      //             dim_, n_obs_, 1.0, R_inv_, dim_, x_T, 1, 0.0, h, 1);
       cblas_dgemv(CblasColMajor, CblasTrans,
                   dim_, n_obs_, 1.0, R_inv_, dim_, x_T, n_obs_, 0.0, h, 1);
 
@@ -232,6 +227,16 @@ void ABO::downdate()
       {
          beta_[i] -= k[i] * k_inv_w;
       }
+
+      int inc = 1;
+      for (const auto &rot : giv_rots)
+      {
+         drot_(&dim_,
+               &R_inv_[rot.j1], &inc, // column rot.j1
+               &R_inv_[rot.j2], &inc, // column rot.j2
+               (double *)&rot.c, (double *)&rot.s);
+      }
+      giv_rots.clear();
    }
    // Deletion for old regime
    else
@@ -242,8 +247,6 @@ void ABO::downdate()
                   dim_, n_obs_, 1.0, R_inv_, dim_, G_e_1_, 1, 0.0, h, 1);
 
       double k[n_obs_];
-      // cblas_dgemv(CblasColMajor, CblasTrans,
-      //             dim_, n_obs_, 1.0, R_inv_, dim_, x_T, 1, 0.0, k, 1);
       cblas_dgemv(CblasColMajor, CblasTrans,
                   dim_, n_obs_, 1.0, R_inv_, dim_, x_T, n_obs_, 0.0, k, 1);
 
@@ -251,26 +254,20 @@ void ABO::downdate()
       cblas_dger(CblasColMajor, dim_, n_obs_, 1.0 / s, h, 1, k, 1, R_inv_, dim_);
 
       // Weight downdate
-      double x_T_B = cblas_ddot(dim_, x_T, 1, beta_, 1);
+      double x_T_B = cblas_ddot(dim_, x_T, n_obs_, beta_, 1);
       double y_0 = y_[0];
 
       for (int i = 0; i < dim_; i++)
       {
          beta_[i] -= (1.0 / s) * (y_0 - x_T_B) * h[i];
       }
-   }
 
-   int inc = 1;  // down a column
-   int n = dim_; // number of rows in R_inv
-
-   for (const auto &rot : giv_rots)
-   {
-      drot_(&n,
-            &R_inv_[rot.j1], &inc, // column rot.j1
-            &R_inv_[rot.j2], &inc, // column rot.j2
-            (double *)&rot.c, (double *)&rot.s);
+      double *result_1 = new double[n_obs_ * dim_];
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
+                  dim_, n_obs_, n_obs_, 1, R_inv_, dim_, G_, n_obs_, 0, result_1, dim_);
+      std::memcpy(R_inv_, result_1, n_obs_ * dim_ * sizeof(double));
+      delete[] result_1;
    }
-   giv_rots.clear();
 
    R_ = deleteRowColMajor(R_, n_obs_, dim_);
    R_inv_ = deleteColColMajor(R_inv_, dim_, n_obs_);
@@ -298,7 +295,7 @@ double ABO::get_cond_num()
    double s[min_mn];
    double *u = new double[ldu * ldu];
    double *vt = new double[ldvt * ldvt];
-   LAPACKE_dgesdd(LAPACK_COL_MAJOR, 'A', m, n, A_copy, lda, s, u, ldu, vt, ldvt);
+   LAPACKE_dgesdd(LAPACK_COL_MAJOR, 'N', m, n, A_copy, lda, s, u, ldu, vt, ldvt);
 
    double maxS = *std::max_element(s, s + min_mn);
    double minS = *std::min_element(s, s + min_mn);
@@ -321,7 +318,7 @@ double ABO::get_real_cond_num()
    double s[min_mn];
    double *u = new double[ldu * ldu];
    double *vt = new double[ldvt * ldvt];
-   LAPACKE_dgesdd(LAPACK_COL_MAJOR, 'A', m, n, A_copy, lda, s, u, ldu, vt, ldvt);
+   LAPACKE_dgesdd(LAPACK_COL_MAJOR, 'N', m, n, A_copy, lda, s, u, ldu, vt, ldvt);
 
    double maxS = *std::max_element(s, s + min_mn);
    double minS = *std::min_element(s, s + min_mn);
