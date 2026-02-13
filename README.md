@@ -1,7 +1,7 @@
 # Adaptive Benign Overfitting (ABO)
 
 C++ implementation of **Adaptive Benign Overfitting (ABO)** for online time-series forecasting using **over-parameterised Recursive Least Squares (RLS)** with **Random Fourier Features (RFFs)** and **numerically stable QR / Givens updates**.
-
+Paper available at: (Arxiv Preprint 2601.22200)[https://arxiv.org/abs/2601.22200]
 This repository accompanies ongoing research on **double descent**, **numerical stability**, and **online learning under non-stationarity**, with applications to **financial** and **energy** time-series.
 
 ---
