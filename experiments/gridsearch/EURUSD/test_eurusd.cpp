@@ -266,8 +266,7 @@ ValMetrics cross_val(int num_rows, int num_cols, double sigma, int k_fold, Model
             X[static_cast<size_t>(i) + static_cast<size_t>(j) * static_cast<size_t>(num_rows)] = X_old(i, j);
 
       abo = std::make_unique<ABO>(X.data(), y.data(), num_rows, ff, D, num_rows);
-      // NOTE: This assumes ABO copies X internally or only uses it during ctor.
-      // If ABO stores X pointer, keep X alive (make X a member / static / move into abo wrapper).
+      // NOTE: ABO does not store X after construction.
    }
 
    if (model == ModelType::QRD || model == ModelType::ALL)
@@ -282,6 +281,22 @@ ValMetrics cross_val(int num_rows, int num_cols, double sigma, int k_fold, Model
       krls_rbf = std::make_unique<KRLS_RBF>(X_no_rff.data(), y.data(),
                                             num_rows, num_cols, regularizer,
                                             temp_sigma, num_rows);
+   }
+
+   // ---- ring buffer for ABO downdate ----
+   int N_ring = num_rows;
+   std::vector<std::vector<double>> X_raw_ring;
+   std::vector<double> y_ring;
+   int ring_idx = 0;
+   if (abo)
+   {
+      X_raw_ring.assign(N_ring, std::vector<double>(d));
+      y_ring.assign(N_ring, 0.0);
+      for (int ri = 0; ri < N_ring; ri++)
+      {
+         for (int j = 0; j < d; j++) X_raw_ring[ri][j] = initial_matrix(ri, j);
+         y_ring[ri] = y[ri];
+      }
    }
 
    // ---- update loop ----
@@ -300,7 +315,24 @@ ValMetrics cross_val(int num_rows, int num_cols, double sigma, int k_fold, Model
          for (int j = 0; j < D; ++j)
             X_update[j] = X_update_old(0, j);
 
+         // Downdate oldest observation before pred+update
+         if (abo->n_obs_ == N_ring)
+         {
+            MatrixXd raw_old_mat(1, d);
+            for (int j = 0; j < d; j++) raw_old_mat(0, j) = X_raw_ring[ring_idx][j];
+            MatrixXd z_old_mat = g_rff->transform(raw_old_mat);
+            std::vector<double> z_old_arr(D);
+            for (int j = 0; j < D; j++) z_old_arr[j] = z_old_mat(0, j);
+            abo->downdate(z_old_arr.data(), y_ring[ring_idx]);
+         }
+
          double pred = abo->pred(X_update.data());
+
+         // Update ring buffer
+         for (int j = 0; j < d; j++) X_raw_ring[ring_idx][j] = update_matrix(i, j);
+         y_ring[ring_idx] = y_update[i];
+         ring_idx = (ring_idx + 1) % N_ring;
+
          abo->update(X_update.data(), y_update[i]);
 
          double r2 = (pred - y_update[i]) * (pred - y_update[i]);

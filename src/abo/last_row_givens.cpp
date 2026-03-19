@@ -1,5 +1,6 @@
 #include <algorithm> // std::fill
 #include <cmath>
+#include <cstring>
 #include "abo/last_row_givens.h"
 
 extern "C"
@@ -15,129 +16,129 @@ namespace givens
    void update(ABO *abo)
    {
       double c, s, r;
-      int n_obs = abo->n_obs_; // current size BEFORE increment in caller
-      int dim = abo->dim_;
+      int n_obs = abo->n_obs_;  // current size AFTER n_obs_++ in caller
+      int dim   = abo->dim_;
+      int max_obs = abo->max_obs_;
 
-      double *R = abo->R_;
-      double *Q = abo->Q_;
+      double *R     = abo->R_;
       double *R_inv = abo->R_inv_;
 
+      int col_stride = max_obs;  // Bug 5 fix: was n_obs (old stride)
+      int last = n_obs - 1;      // index of the newly added row
+
       int limit = std::min(n_obs - 1, dim);
-      int row_stride = 1;
-      int col_stride = n_obs;
-      int last = n_obs - 1;
 
       for (int j = 0; j < limit; ++j)
       {
-         // Zero R(last, j) using Givens on rows (j,last)
+         // Zero R(last, j) using Givens on rows j and last
          dlartg_(&R[j + j * col_stride],
                  &R[last + j * col_stride],
                  &c, &s, &r);
 
-         R[j + j * col_stride] = r;
+         R[j + j * col_stride]    = r;
          R[last + j * col_stride] = 0.0;
 
-         // Apply to remaining part of those two rows in R
-         int temp = dim - j - 1;
-         int idx_1 = j + (j + 1) * col_stride;
+         // Apply rotation to remaining columns j+1..dim-1 of rows j and last
+         int temp  = dim - j - 1;
+         int idx_1 = j    + (j + 1) * col_stride;
          int idx_2 = last + (j + 1) * col_stride;
 
          drot_(&temp, &R[idx_1], &col_stride,
                &R[idx_2], &col_stride,
                &c, &s);
 
-         // Apply same row-rotation to Q (rows j and last)
-         int q1 = j * col_stride;
-         int q2 = last * col_stride;
-         drot_(&n_obs, &Q[q1], &row_stride,
-               &Q[q2], &row_stride,
-               &c, &s);
-
+         // Apply same rotation to R_inv_ columns j and last
          int inc = 1;
          drot_(&dim, &R_inv[j * dim], &inc, &R_inv[last * dim], &inc, &c, &s);
       }
    }
-   // DOWNDATE: identical to your old logic for Q (and sign fix),
-   // PLUS: compute Ge1 and apply the implied effect on R_inv
-   void downdate(ABO *abo)
+
+   // Q-less downdate: h = R_inv^T * z_old replaces reading the first row of Q.
+   void downdate(ABO *abo, double *z_old)
    {
-      int n_obs = abo->n_obs_; // current size BEFORE abo->n_obs_-- in caller
-      int dim = abo->dim_;
+      int n_obs   = abo->n_obs_;  // current size BEFORE n_obs_-- in caller
+      int dim     = abo->dim_;
+      int max_obs = abo->max_obs_;
 
-      double *Q = abo->Q_;
-      double *R = abo->R_;
-      double *G = abo->G_;
+      double *R     = abo->R_;
+      double *G     = abo->G_;
+      double *R_inv = abo->R_inv_;
+      double *h     = abo->scratch_n_;  // Bug 4: no heap alloc, reuse scratch
 
-      // double G[n_obs * n_obs] = {0};
+      // Step 1: h = R_inv^T * z_old  (replaces reading first row of Q)
+      cblas_dgemv(CblasColMajor, CblasTrans,
+                  dim, n_obs, 1.0,
+                  R_inv, dim, z_old, 1, 0.0, h, 1);
+
+      // Step 2: G = I
       std::fill(G, G + n_obs * n_obs, 0.0);
       for (int i = 0; i < n_obs; i++)
-      {
-         G[i * n_obs + i] = 1;
-      }
+         G[i * n_obs + i] = 1.0;
 
       double c, s, r;
-      int col_stride = n_obs;
-      int row_stride = 1;
-      int last = n_obs - 1;
+      int one = 1;
 
+      // Step 3: Givens rotations to zero h[1..n_obs-1] bottom-up
       for (int i = n_obs - 1; i > 0; --i)
       {
-         int idx_1 = (i - 1) * col_stride;
-         int idx_2 = i * col_stride;
+         dlartg_(&h[i - 1], &h[i], &c, &s, &r);
+         h[i - 1] = r;
+         h[i]     = 0.0;
 
-         dlartg_(&Q[idx_1], &Q[idx_2], &c, &s, &r);
-
-         Q[idx_1] = r;
-         Q[idx_2] = 0.0;
-
-         int temp = n_obs - 1;
-         drot_(&temp, &Q[idx_1 + 1], &row_stride,
-               &Q[idx_2 + 1], &row_stride,
+         // Rotate columns i-1 and i of G (each column is n_obs elements, stride 1)
+         drot_(&n_obs, &G[(i - 1) * n_obs], &one,
+               &G[i * n_obs],       &one,
                &c, &s);
-
-         drot_(&n_obs, &G[idx_1], &row_stride,
-               &G[idx_2], &row_stride, &c, &s);
 
          if (dim > n_obs)
          {
-            int n = dim - i + 1; // rotate across all columns 0..dim-1
-            int inc = n_obs;     // step to next column at same row (column-major)
+            // Bug 5 fix: stride is max_obs (not n_obs)
+            // Rotate rows i-1 and i of R, from column i-1 to dim-1
+            int n   = dim - i + 1;
+            int inc = max_obs;
             drot_(&n,
-                  &R[(i - 1) * n_obs + i - 1], &inc, // R(i-1, 0)
-                  &R[(i - 1) * n_obs + i], &inc,     // R(i,   0)
+                  &R[(i - 1) * max_obs + (i - 1)], &inc,
+                  &R[(i - 1) * max_obs +  i      ], &inc,
                   &c, &s);
 
-            inc = 1;
             abo->giv_rots.push_back({(i - 1) * dim, i * dim, c, s});
          }
       }
 
+      // Step 4: Finalize G_e_1_ and (in old regime) apply G^T to R
       if (dim > n_obs)
       {
+         // New regime: record first column of G for use in ABO::downdate
          for (int t = 0; t < n_obs; t++)
-         {
             abo->G_e_1_[t] = G[t];
-         }
       }
       else
       {
-         if (Q[0] < 0)
-         {
+         // Old regime: sign fix using h[0] (replaces Q[0] sign check)
+         if (h[0] < 0)
             for (int i = 0; i < n_obs * n_obs; ++i)
-            {
-               Q[i] *= -1;
                G[i] *= -1;
-            }
-         }
+
          for (int t = 0; t < n_obs; t++)
-         {
             abo->G_e_1_[t] = G[t];
-         }
-         double *result = new double[n_obs * dim];
+
+         // Apply G^T * R, writing result back into R_.
+         // R_ has col stride max_obs (not contiguous), so copy to compact scratch first.
+         for (int j = 0; j < dim; j++)
+            std::memcpy(&abo->scratch_d_[j * n_obs], &R[j * max_obs],
+                        n_obs * sizeof(double));
+
          cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans,
-                     n_obs, dim, n_obs, 1, G, n_obs, R, n_obs, 0, result, n_obs);
-         std::memcpy(R, result, n_obs * dim * sizeof(double));
-         delete[] result;
+                     n_obs, dim, n_obs, 1.0,
+                     G, n_obs,
+                     abo->scratch_d_, n_obs,
+                     0.0, abo->scratch_d2_, n_obs);
+
+         for (int j = 0; j < dim; j++)
+            std::memcpy(&R[j * max_obs], &abo->scratch_d2_[j * n_obs],
+                        n_obs * sizeof(double));
       }
+      // No delete[] h — it is scratch_n_, owned by ABO
    }
+
 } // namespace givens

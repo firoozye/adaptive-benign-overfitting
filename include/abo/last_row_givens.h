@@ -25,5 +25,5 @@ struct GivensRot;
 namespace givens
 {
     void update(ABO *abo);
-    void downdate(ABO *abo);
+    void downdate(ABO *abo, double *z_old);
 } // namespace givens

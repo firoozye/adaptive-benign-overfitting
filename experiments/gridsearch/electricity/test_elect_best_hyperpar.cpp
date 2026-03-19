@@ -389,6 +389,16 @@ static inline FoldResultRow run_fold_abo(
 
    ABO abo(X.data(), y, W, ff, D, W);
 
+   // Ring buffer: stores raw (pre-RFF) features and y values for downdate
+   std::vector<std::vector<double>> X_raw_ring(W, std::vector<double>(L));
+   std::vector<double> y_ring(W, 0.0);
+   for (int ri = 0; ri < W; ri++)
+   {
+      for (int j = 0; j < L; j++) X_raw_ring[ri][j] = initial_matrix(ri, j);
+      y_ring[ri] = y[ri];
+   }
+   int ring_idx = 0;
+
    std::vector<double> se;
    se.reserve(val_length);
 
@@ -412,9 +422,26 @@ static inline FoldResultRow run_fold_abo(
       for (int j = 0; j < D; ++j)
          X_update[static_cast<size_t>(j)] = X_up(0, j);
 
+      // Downdate oldest observation before pred+update
+      if (abo.n_obs_ == W)
+      {
+         MatrixXd raw_old_mat(1, L);
+         for (int j = 0; j < L; j++) raw_old_mat(0, j) = X_raw_ring[ring_idx][j];
+         MatrixXd z_old_mat = g_rff.transform(raw_old_mat);
+         std::vector<double> z_old_arr(D);
+         for (int j = 0; j < D; j++) z_old_arr[j] = z_old_mat(0, j);
+         abo.downdate(z_old_arr.data(), y_ring[ring_idx]);
+      }
+
       double pred = 0.0;
       t0 = Clock::now();
       pred = abo.pred(X_update.data());
+
+      // Update ring buffer
+      for (int j = 0; j < L; j++) X_raw_ring[ring_idx][j] = update_matrix(i, j);
+      y_ring[ring_idx] = y_update[i];
+      ring_idx = (ring_idx + 1) % W;
+
       abo.update(X_update.data(), y_update[i]);
       t1 = Clock::now();
       if (i >= warmup)

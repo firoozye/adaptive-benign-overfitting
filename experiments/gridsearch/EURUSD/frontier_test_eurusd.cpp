@@ -130,8 +130,18 @@ static FoldResult run_fold_ABO(MatrixXd &initial_matrix,
             X_init[static_cast<size_t>(i) + static_cast<size_t>(j) * static_cast<size_t>(W)] = X_old(i, j);
 
     auto abo = std::make_unique<ABO>(X_init.data(),
-                                     const_cast<double *>(y_init.data()), // matches your ctor usage pattern
+                                     const_cast<double *>(y_init.data()),
                                      W, ff, D, W);
+
+    // Ring buffer: stores raw (pre-RFF) features and y values for downdate
+    std::vector<std::vector<double>> X_raw_ring(W, std::vector<double>(L));
+    std::vector<double> y_ring(W, 0.0);
+    for (int ri = 0; ri < W; ri++)
+    {
+        for (int j = 0; j < L; j++) X_raw_ring[ri][j] = initial_matrix(ri, j);
+        y_ring[ri] = y_init[ri];
+    }
+    int ring_idx = 0;
 
     std::vector<double> x_rff(static_cast<size_t>(D), 0.0);
 
@@ -149,7 +159,24 @@ static FoldResult run_fold_ABO(MatrixXd &initial_matrix,
         for (int j = 0; j < D; ++j)
             x_rff[j] = row_feat(0, j);
 
+        // Downdate oldest observation before pred+update
+        if (abo->n_obs_ == W)
+        {
+            MatrixXd raw_old_mat(1, L);
+            for (int j = 0; j < L; j++) raw_old_mat(0, j) = X_raw_ring[ring_idx][j];
+            MatrixXd z_old_mat = g_rff->transform(raw_old_mat);
+            std::vector<double> z_old_arr(D);
+            for (int j = 0; j < D; j++) z_old_arr[j] = z_old_mat(0, j);
+            abo->downdate(z_old_arr.data(), y_ring[ring_idx]);
+        }
+
         double pred = abo->pred(x_rff.data());
+
+        // Update ring buffer
+        for (int j = 0; j < L; j++) X_raw_ring[ring_idx][j] = update_matrix(i, j);
+        y_ring[ring_idx] = y_update[i];
+        ring_idx = (ring_idx + 1) % W;
+
         abo->update(x_rff.data(), y_update[i]);
 
         auto t1 = std::chrono::high_resolution_clock::now();

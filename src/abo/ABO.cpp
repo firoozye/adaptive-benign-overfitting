@@ -7,281 +7,259 @@ extern "C"
    void dlartg_(double *a, double *b, double *c, double *s, double *r);
    void drot_(int *n, double *dx, int *incx, double *dy, int *incy,
               double *c, double *s);
-   void dscal_(const int *n,
-               const double *da,
-               double *dx,
-               const int *incx);
 }
 
 ABO::~ABO()
 {
-   delete[] X_;
    delete[] y_;
    delete[] R_;
    delete[] R_inv_;
-   delete[] Q_;
-   delete[] z_;
    delete[] beta_;
    delete[] G_e_1_;
    delete[] G_;
+   delete[] scratch_n_;
+   delete[] scratch_n2_;
+   delete[] scratch_dim_;
+   delete[] scratch_d_;
+   delete[] scratch_d2_;
 }
 
 ABO::ABO(double *x_input, double *y_input, int max_obs, double ff, int dim, int n_batch)
     : G_(nullptr),
       R_(nullptr),
       R_inv_(nullptr),
-      Q_(nullptr),
-      z_(nullptr),
       beta_(nullptr),
       // hyperparameters
       max_obs_(max_obs),
-      r_c_size_(n_batch * dim),
       n_obs_(n_batch),
       dim_(dim),
       ff_(ff),
       sqrt_ff_(sqrt(ff))
 {
+   // Pre-allocate everything to max capacity — no reallocation in hot path
+   y_          = new double[max_obs_]();
+   R_          = new double[max_obs_ * dim_]();
+   R_inv_      = new double[dim_  * max_obs_]();
+   beta_       = new double[dim_]();
+   G_e_1_      = new double[max_obs_ + 1];
+   G_          = new double[(max_obs_ + 1) * (max_obs_ + 1)];
+   scratch_n_  = new double[max_obs_]();
+   scratch_n2_ = new double[max_obs_]();
+   scratch_dim_ = new double[dim_]();
+   scratch_d_  = new double[max_obs_ * dim_]();
+   scratch_d2_ = new double[max_obs_ * dim_]();
 
-   X_ = new double[n_obs_ * dim_]();
-   std::memcpy(X_, x_input, n_obs_ * dim_ * sizeof(double));
-   y_ = new double[n_obs_]();
    std::memcpy(y_, y_input, n_obs_ * sizeof(double));
-   G_e_1_ = new double[max_obs + 1];
-   G_ = new double[(max_obs + 1) * (max_obs + 1)];
-
-   batchInitialize();
+   batchInitialize(x_input);
 }
 
-void ABO::batchInitialize()
+void ABO::batchInitialize(double *x_input)
 {
-   // Forgetting factor matrix
+   // Scale features and targets by forgetting factor
+   double *X_scaled = new double[n_obs_ * dim_]();
+   std::memcpy(X_scaled, x_input, n_obs_ * dim_ * sizeof(double));
 
    for (int i = 0; i < n_obs_; i++)
    {
-      double pow_n = (n_obs_ - i - 1) / 2.0;
-      double scale = pow(ff_, pow_n);
+      double scale = std::pow(ff_, (n_obs_ - i - 1) / 2.0);
       for (int j = 0; j < dim_; j++)
-      {
-         X_[j * n_obs_ + i] *= scale;
-      }
+         X_scaled[j * n_obs_ + i] *= scale;
       y_[i] *= scale;
    }
 
-   // initialize the Q, R_ matrices
-   std::tie(Q_, R_) = Q_R_compute(X_, n_obs_, dim_);
+   // QR decomposition — Q_local and R_temp have stride n_obs_
+   double *Q_local, *R_temp;
+   std::tie(Q_local, R_temp) = Q_R_compute(X_scaled, n_obs_, dim_);
 
-   R_inv_ = new double[r_c_size_];
-   pinv(R_, R_inv_, n_obs_, dim_);
+   // Copy R_temp (stride n_obs_) into R_ (stride max_obs_) — key stride difference
+   for (int j = 0; j < dim_; j++)
+      std::memcpy(&R_[j * max_obs_], &R_temp[j * n_obs_], n_obs_ * sizeof(double));
 
-   z_ = new double[n_obs_]();
-   beta_ = new double[dim_]();
+   // Compute pseudo-inverse of R_temp into R_inv_ (stride dim_)
+   pinv(R_temp, R_inv_, n_obs_, dim_);
 
+   // z = Q^T * y, then beta = R_inv * z
+   double *z_local = new double[n_obs_]();
    cblas_dgemv(CblasColMajor, CblasTrans,
-               n_obs_, n_obs_, 1.0, Q_, n_obs_, y_, 1, 0.0, z_, 1);
+               n_obs_, n_obs_, 1.0, Q_local, n_obs_, y_, 1, 0.0, z_local, 1);
    cblas_dgemv(CblasColMajor, CblasNoTrans,
-               dim_, n_obs_, 1.0, R_inv_, dim_, z_, 1, 0.0, beta_, 1);
+               dim_, n_obs_, 1.0, R_inv_, dim_, z_local, 1, 0.0, beta_, 1);
+
+   delete[] Q_local;
+   delete[] R_temp;
+   delete[] z_local;
+   delete[] X_scaled;
 }
 
-// Update method
 void ABO::update(double *new_x, double &new_y)
 {
-
    if (ff_ != 1.0)
    {
-      for (int i = 0; i < n_obs_; ++i)
-      {
-         y_[i] *= sqrt_ff_;
-      }
-      for (int i = 0; i < r_c_size_; ++i)
-      {
-         R_inv_[i] *= (1.0 / sqrt_ff_);
-         R_[i] *= sqrt_ff_;
-      }
+      // Scale y (contiguous)
+      cblas_dscal(n_obs_, sqrt_ff_, y_, 1);
+      // Scale R_ column by column (stride max_obs_)
+      for (int j = 0; j < dim_; ++j)
+         cblas_dscal(n_obs_, sqrt_ff_, &R_[j * max_obs_], 1);
+      // Scale R_inv_ (contiguous n_obs_ columns of dim_ elements each)
+      cblas_dscal(n_obs_ * dim_, 1.0 / sqrt_ff_, R_inv_, 1);
    }
 
-   y_ = addRowColMajor(y_, n_obs_, 1);
+   // Append new target
    y_[n_obs_] = new_y;
 
-   double d[n_obs_];
-   double c[dim_];
-
+   // d = R_inv^T * new_x  -> scratch_n_ (n_obs_-length)
    cblas_dgemv(CblasColMajor, CblasTrans,
-               dim_, n_obs_, 1.0, R_inv_, dim_, new_x, 1, 0.0, d, 1);
+               dim_, n_obs_, 1.0, R_inv_, dim_, new_x, 1, 0.0, scratch_n_, 1);
 
-   double temp_c[n_obs_];
+   // temp = R_ * new_x   -> scratch_n2_ (n_obs_-length), lda = max_obs_
    cblas_dgemv(CblasColMajor, CblasNoTrans,
-               n_obs_, dim_, 1.0, R_, n_obs_, new_x, 1, 0.0, temp_c, 1);
-   cblas_dgemv(CblasColMajor, CblasNoTrans,
-               dim_, n_obs_, 1.0, R_inv_, dim_, temp_c, 1, 0.0, c, 1);
+               n_obs_, dim_, 1.0, R_, max_obs_, new_x, 1, 0.0, scratch_n2_, 1);
 
+   // c = new_x - R_inv_ * (R_ * new_x)  -> scratch_dim_ (dim_-length)
+   cblas_dgemv(CblasColMajor, CblasNoTrans,
+               dim_, n_obs_, 1.0, R_inv_, dim_, scratch_n2_, 1, 0.0, scratch_dim_, 1);
    for (int i = 0; i < dim_; i++)
-   {
-      c[i] = new_x[i] - c[i];
-   }
+      scratch_dim_[i] = new_x[i] - scratch_dim_[i];
 
-   // Update for new regime
    if (n_obs_ < dim_)
    {
-      double c_inv[dim_];
-      pinv(c, c_inv, dim_, 1);
-      cblas_dger(CblasColMajor, dim_, n_obs_, -1.0, c_inv, 1, d, 1, R_inv_, dim_);
-      R_inv_ = addColColMajor(R_inv_, dim_, n_obs_);
-
+      // New regime: c = scratch_dim_, c_inv -> scratch_n2_
+      pinv(scratch_dim_, scratch_n2_, dim_, 1);
+      cblas_dger(CblasColMajor, dim_, n_obs_, -1.0, scratch_n2_, 1, scratch_n_, 1, R_inv_, dim_);
+      // Write new column of R_inv_ at position n_obs_
       for (int i = 0; i < dim_; ++i)
-      {
-         R_inv_[n_obs_ * dim_ + i] = c_inv[i];
-      }
+         R_inv_[n_obs_ * dim_ + i] = scratch_n2_[i];
 
-      // weight update
       double x_T_w = cblas_ddot(dim_, new_x, 1, beta_, 1);
       for (int i = 0; i < dim_; i++)
-      {
-         beta_[i] += c_inv[i] * (new_y - x_T_w);
-      }
+         beta_[i] += scratch_n2_[i] * (new_y - x_T_w);
    }
-   // Update for old regime
    else
    {
-      double b_k[dim_];
-      double alpha = cblas_ddot(n_obs_, d, 1, d, 1);
-      alpha = 1 / (1 + alpha);
+      // Old regime: d = scratch_n_, b_k -> scratch_dim_
+      double alpha = cblas_ddot(n_obs_, scratch_n_, 1, scratch_n_, 1);
+      alpha = 1.0 / (1.0 + alpha);
       cblas_dgemv(CblasColMajor, CblasNoTrans,
-                  dim_, n_obs_, alpha, R_inv_, dim_, d, 1, 0.0, b_k, 1);
-      cblas_dger(CblasColMajor, dim_, n_obs_, -1.0, b_k, 1, d, 1, R_inv_, dim_);
-      R_inv_ = addColColMajor(R_inv_, dim_, n_obs_);
-
+                  dim_, n_obs_, alpha, R_inv_, dim_, scratch_n_, 1, 0.0, scratch_dim_, 1);
+      cblas_dger(CblasColMajor, dim_, n_obs_, -1.0, scratch_dim_, 1, scratch_n_, 1, R_inv_, dim_);
+      // Write new column of R_inv_ at position n_obs_
       for (int i = 0; i < dim_; ++i)
-      {
-         R_inv_[n_obs_ * dim_ + i] = b_k[i];
-      }
+         R_inv_[n_obs_ * dim_ + i] = scratch_dim_[i];
 
-      // weight update
       double x_T_w = cblas_ddot(dim_, new_x, 1, beta_, 1);
       for (int i = 0; i < dim_; i++)
-      {
-         beta_[i] += b_k[i] * (new_y - x_T_w);
-      }
+         beta_[i] += scratch_dim_[i] * (new_y - x_T_w);
    }
 
-   R_ = addRowColMajor(R_, n_obs_, dim_);
-
-   for (int i = 0; i < dim_; ++i)
-   {
-      R_[(i + 1) * n_obs_ + i] = new_x[i];
-   }
-
-   Q_ = addRowAndColumnColMajor(Q_, n_obs_, n_obs_);
-   Q_[((n_obs_ + 1) * (n_obs_ + 1)) - 1] = 1;
+   // Write new row to R_ at row index n_obs_ (col j: position n_obs_ + j*max_obs_)
+   for (int j = 0; j < dim_; ++j)
+      R_[n_obs_ + j * max_obs_] = new_x[j];
 
    n_obs_++;
-
    givens::update(this);
-
-   r_c_size_ = n_obs_ * dim_;
-
-   if (n_obs_ > max_obs_)
-   {
-      downdate();
-   }
 }
 
-void ABO::downdate()
+void ABO::downdate(double *z_old, double y_old)
 {
-   // Update matrices
-   givens::downdate(this);
-   double *x_T = R_; // pointer to first row
+   // Givens rotations to prepare G, G_e_1_, and (in new regime) update R and record giv_rots
+   givens::downdate(this, z_old);
 
-   // Deletion for new regime
+   double *x_T = R_;  // pointer to first row; stride between columns is max_obs_
+
    if (n_obs_ < dim_)
    {
-
-      double k[dim_];
-      double h[n_obs_];
-      // G_e_1_ is declared in givens downdate. G e_1
+      // New regime
+      // k = R_inv_ * G_e_1_  -> scratch_dim_ (dim_-length)
       cblas_dgemv(CblasColMajor, CblasNoTrans,
-                  dim_, n_obs_, 1.0, R_inv_, dim_, G_e_1_, 1, 0.0, k, 1);
+                  dim_, n_obs_, 1.0, R_inv_, dim_, G_e_1_, 1, 0.0, scratch_dim_, 1);
+      // h = R_inv_^T * x_T  -> scratch_n_ (n_obs_-length), x_T stride = max_obs_
       cblas_dgemv(CblasColMajor, CblasTrans,
-                  dim_, n_obs_, 1.0, R_inv_, dim_, x_T, n_obs_, 0.0, h, 1);
+                  dim_, n_obs_, 1.0, R_inv_, dim_, x_T, max_obs_, 0.0, scratch_n_, 1);
 
-      double k_inv[dim_];
-      double h_inv[n_obs_];
-      pinv(k, k_inv, dim_, 1);
-      pinv(h, h_inv, 1, n_obs_);
+      // Lay out temporaries in scratch_d_ to avoid aliasing:
+      //   h_inv   at scratch_d_[0 .. n_obs_-1]
+      //   P_h_inv at scratch_d_[n_obs_ .. n_obs_+dim_-1]
+      double *k_inv    = scratch_n2_;          // dim_-length
+      double *h_inv    = scratch_d_;           // n_obs_-length
+      double *P_h_inv  = scratch_d_ + n_obs_;  // dim_-length
+      double *k_inv_R  = scratch_d2_;          // n_obs_-length
 
-      double k_inv_R_inv[n_obs_];
+      pinv(scratch_dim_, k_inv, dim_, 1);
+      pinv(scratch_n_, h_inv, 1, n_obs_);
+
+      // k_inv_R_inv = R_inv_^T * k_inv  -> k_inv_R
       cblas_dgemv(CblasColMajor, CblasTrans,
-                  dim_, n_obs_, 1.0, R_inv_, dim_, k_inv, 1, 0.0, k_inv_R_inv, 1);
-      double s = cblas_ddot(n_obs_, k_inv_R_inv, 1, h_inv, 1);
+                  dim_, n_obs_, 1.0, R_inv_, dim_, k_inv, 1, 0.0, k_inv_R, 1);
+      double s = cblas_ddot(n_obs_, k_inv_R, 1, h_inv, 1);
 
-      double P_h_inv[dim_];
+      // P_h_inv = R_inv_ * h_inv
       cblas_dgemv(CblasColMajor, CblasNoTrans,
                   dim_, n_obs_, 1.0, R_inv_, dim_, h_inv, 1, 0.0, P_h_inv, 1);
 
-      cblas_dger(CblasColMajor, dim_, n_obs_, -1.0, k, 1, k_inv_R_inv, 1, R_inv_, dim_);
-      cblas_dger(CblasColMajor, dim_, n_obs_, -1.0, P_h_inv, 1, h, 1, R_inv_, dim_);
-      cblas_dger(CblasColMajor, dim_, n_obs_, s, k, 1, h, 1, R_inv_, dim_);
+      // R_inv_ -= k * k_inv_R_inv^T
+      cblas_dger(CblasColMajor, dim_, n_obs_, -1.0, scratch_dim_, 1, k_inv_R, 1, R_inv_, dim_);
+      // R_inv_ -= P_h_inv * h^T
+      cblas_dger(CblasColMajor, dim_, n_obs_, -1.0, P_h_inv, 1, scratch_n_, 1, R_inv_, dim_);
+      // R_inv_ += s * k * h^T
+      cblas_dger(CblasColMajor, dim_, n_obs_, s, scratch_dim_, 1, scratch_n_, 1, R_inv_, dim_);
 
       // Weight downdate
       double k_inv_w = cblas_ddot(dim_, k_inv, 1, beta_, 1);
       for (int i = 0; i < dim_; ++i)
-      {
-         beta_[i] -= k[i] * k_inv_w;
-      }
+         beta_[i] -= scratch_dim_[i] * k_inv_w;
 
       int inc = 1;
       for (const auto &rot : giv_rots)
       {
          drot_(&dim_,
-               &R_inv_[rot.j1], &inc, // column rot.j1
-               &R_inv_[rot.j2], &inc, // column rot.j2
+               &R_inv_[rot.j1], &inc,
+               &R_inv_[rot.j2], &inc,
                (double *)&rot.c, (double *)&rot.s);
       }
       giv_rots.clear();
    }
-   // Deletion for old regime
    else
    {
-
-      double h[dim_];
+      // Old regime
+      // h = R_inv_ * G_e_1_  -> scratch_dim_ (dim_-length)
       cblas_dgemv(CblasColMajor, CblasNoTrans,
-                  dim_, n_obs_, 1.0, R_inv_, dim_, G_e_1_, 1, 0.0, h, 1);
-
-      double k[n_obs_];
+                  dim_, n_obs_, 1.0, R_inv_, dim_, G_e_1_, 1, 0.0, scratch_dim_, 1);
+      // k = R_inv_^T * x_T  -> scratch_n_ (n_obs_-length), x_T stride = max_obs_
       cblas_dgemv(CblasColMajor, CblasTrans,
-                  dim_, n_obs_, 1.0, R_inv_, dim_, x_T, n_obs_, 0.0, k, 1);
+                  dim_, n_obs_, 1.0, R_inv_, dim_, x_T, max_obs_, 0.0, scratch_n_, 1);
 
-      double s = 1 - cblas_ddot(n_obs_, k, 1, G_e_1_, 1);
-      cblas_dger(CblasColMajor, dim_, n_obs_, 1.0 / s, h, 1, k, 1, R_inv_, dim_);
+      double s = 1.0 - cblas_ddot(n_obs_, scratch_n_, 1, G_e_1_, 1);
+      cblas_dger(CblasColMajor, dim_, n_obs_, 1.0 / s, scratch_dim_, 1, scratch_n_, 1, R_inv_, dim_);
 
       // Weight downdate
-      double x_T_B = cblas_ddot(dim_, x_T, n_obs_, beta_, 1);
-      double y_0 = y_[0];
-
+      double x_T_B = cblas_ddot(dim_, x_T, max_obs_, beta_, 1);
       for (int i = 0; i < dim_; i++)
-      {
-         beta_[i] -= (1.0 / s) * (y_0 - x_T_B) * h[i];
-      }
+         beta_[i] -= (1.0 / s) * (y_old - x_T_B) * scratch_dim_[i];
 
-      double *result_1 = new double[n_obs_ * dim_];
+      // R_inv_ = R_inv_ * G_  (use scratch_d_ to avoid aliasing)
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
-                  dim_, n_obs_, n_obs_, 1, R_inv_, dim_, G_, n_obs_, 0, result_1, dim_);
-      std::memcpy(R_inv_, result_1, n_obs_ * dim_ * sizeof(double));
-      delete[] result_1;
+                  dim_, n_obs_, n_obs_, 1.0,
+                  R_inv_, dim_, G_, n_obs_,
+                  0.0, scratch_d_, dim_);
+      std::memcpy(R_inv_, scratch_d_, n_obs_ * dim_ * sizeof(double));
    }
 
-   R_ = deleteRowColMajor(R_, n_obs_, dim_);
-   R_inv_ = deleteColColMajor(R_inv_, dim_, n_obs_);
-   Q_ = deleteRowColMajor(Q_, n_obs_, n_obs_);
-   Q_ = deleteColColMajor(Q_, n_obs_ - 1, n_obs_);
-   y_ = deleteRowColMajor(y_, n_obs_, 1);
+   // Delete first row of R_ via memmove (Bug 1 fix: stride max_obs_, not n_obs_-1)
+   for (int j = 0; j < dim_; ++j)
+      std::memmove(&R_[j * max_obs_], &R_[j * max_obs_ + 1], (n_obs_ - 1) * sizeof(double));
+
+   // Delete first column of R_inv_ (stride dim_, contiguous column block)
+   std::memmove(R_inv_, R_inv_ + dim_, dim_ * (n_obs_ - 1) * sizeof(double));
+
+   // Delete first element of y_
+   std::memmove(y_, y_ + 1, (n_obs_ - 1) * sizeof(double));
+
    n_obs_--;
-   r_c_size_ = n_obs_ * dim_;
 }
 
 double ABO::pred(double *x)
 {
-   double pred_value = cblas_ddot(dim_, x, 1, beta_, 1);
-   return pred_value;
+   return cblas_ddot(dim_, x, 1, beta_, 1);
 }
 
 double ABO::get_cond_num()
@@ -292,7 +270,7 @@ double ABO::get_cond_num()
    double *A_copy = new double[n_obs_ * dim_];
    std::memcpy(A_copy, R_inv_, n_obs_ * dim_ * sizeof(double));
    int min_mn = std::min(n_obs_, dim_);
-   double s[min_mn];
+   double *s = new double[min_mn];
    double *u = new double[ldu * ldu];
    double *vt = new double[ldvt * ldvt];
    LAPACKE_dgesdd(LAPACK_COL_MAJOR, 'N', m, n, A_copy, lda, s, u, ldu, vt, ldvt);
@@ -303,29 +281,7 @@ double ABO::get_cond_num()
    delete[] A_copy;
    delete[] vt;
    delete[] u;
-
-   return maxS / minS;
-}
-
-double ABO::get_real_cond_num()
-{
-   lapack_int m = n_obs_, n = dim_, lda = m;
-   lapack_int ldu = m, ldvt = n;
-
-   double *A_copy = new double[n_obs_ * dim_];
-   std::memcpy(A_copy, X_, n_obs_ * dim_ * sizeof(double));
-   int min_mn = std::min(n_obs_, dim_);
-   double s[min_mn];
-   double *u = new double[ldu * ldu];
-   double *vt = new double[ldvt * ldvt];
-   LAPACKE_dgesdd(LAPACK_COL_MAJOR, 'N', m, n, A_copy, lda, s, u, ldu, vt, ldvt);
-
-   double maxS = *std::max_element(s, s + min_mn);
-   double minS = *std::min_element(s, s + min_mn);
-
-   delete[] A_copy;
-   delete[] vt;
-   delete[] u;
+   delete[] s;
 
    return maxS / minS;
 }

@@ -6,14 +6,14 @@ CORE_SRCS := \
   src/pseudo_inverse.cpp \
   src/abo/last_row_givens.cpp \
   src/abo/gau_rff.cpp \
-  src/add_row_col.cpp \
   src/read_csv_func.cpp
 
 CORE_OBJS := $(call make-objs,$(CORE_SRCS))
 
 CORE_SRCS_2 := \
   src/baselines/QRD_RLS/qrd_rls.cpp \
-  src/baselines/KRLS_RBF/krls_rbf.cpp
+  src/baselines/KRLS_RBF/krls_rbf.cpp \
+  src/add_row_col.cpp
 
 CORE_OBJS_2 := $(call make-objs,$(CORE_SRCS_2))
 
