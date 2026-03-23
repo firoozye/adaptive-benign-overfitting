@@ -2,14 +2,14 @@
 CXX       ?= g++
 CPPFLAGS  ?= -Iinclude -MMD -MP
 
-INCLUDES = -Iinclude -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/include/eigen3 -I/usr/lib/lapack
+INCLUDES = -Iinclude -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/include/eigen3 -Ilibs/eigen -I/usr/lib/lapack
 CXXFLAGS  = -std=c++17 $(INCLUDES) -DHAVE_LAPACK_CONFIG_H -DLAPACK_COMPLEX_STRUCTURE \
 			-Wall -Wno-shadow \
 			-Wno-unused-parameter -Wno-sign-compare -Wno-unused-variable \
 			-Wno-reorder -Wno-comment -Wno-deprecated-declarations
 
 LDFLAGS   ?= -Llibs/lib
-LDLIBS    ?= -lopenblas -llapacke -lgfortran -lm
+LDLIBS    ?= -lopenblas -llapacke -lm
 DEBUGFLAGS = -g -DEIGEN_INITIALIZE_MATRICES_BY_ZERO
 ifdef DEBUG
   CXXFLAGS += $(DEBUGFLAGS) -DLOG_LEVEL=4

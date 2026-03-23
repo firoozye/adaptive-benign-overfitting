@@ -14,6 +14,7 @@ ABO::~ABO()
    delete[] y_;
    delete[] R_;
    delete[] R_inv_;
+   delete[] Q_;
    delete[] beta_;
    delete[] G_e_1_;
    delete[] G_;
@@ -40,11 +41,13 @@ ABO::ABO(double *x_input, double *y_input, int max_obs, double ff, int dim, int 
    y_          = new double[max_obs_]();
    R_          = new double[max_obs_ * dim_]();
    R_inv_      = new double[dim_  * max_obs_]();
+   Q_          = new double[(max_obs_ + 1) * (max_obs_ + 1)]();
    beta_       = new double[dim_]();
    G_e_1_      = new double[max_obs_ + 1];
-   G_          = new double[(max_obs_ + 1) * (max_obs_ + 1)];
+   G_          = new double[(max_obs_ + 1) * (max_obs_ + 1)]();
    scratch_n_  = new double[max_obs_]();
-   scratch_n2_ = new double[max_obs_]();
+   // scratch_n2_ holds k_inv (dim_-length) in new-regime downdate, so needs max(max_obs_, dim_)
+   scratch_n2_ = new double[std::max(max_obs_, dim_)]();
    scratch_dim_ = new double[dim_]();
    scratch_d_  = new double[max_obs_ * dim_]();
    scratch_d2_ = new double[max_obs_ * dim_]();
@@ -74,6 +77,11 @@ void ABO::batchInitialize(double *x_input)
    // Copy R_temp (stride n_obs_) into R_ (stride max_obs_) — key stride difference
    for (int j = 0; j < dim_; j++)
       std::memcpy(&R_[j * max_obs_], &R_temp[j * n_obs_], n_obs_ * sizeof(double));
+
+   // Copy Q_local (stride n_obs_) into Q_ (stride max_obs_+1)
+   const int q_stride = max_obs_ + 1;
+   for (int j = 0; j < n_obs_; j++)
+      std::memcpy(&Q_[j * q_stride], &Q_local[j * n_obs_], n_obs_ * sizeof(double));
 
    // Compute pseudo-inverse of R_temp into R_inv_ (stride dim_)
    pinv(R_temp, R_inv_, n_obs_, dim_);
@@ -154,6 +162,17 @@ void ABO::update(double *new_x, double &new_y)
    // Write new row to R_ at row index n_obs_ (col j: position n_obs_ + j*max_obs_)
    for (int j = 0; j < dim_; ++j)
       R_[n_obs_ + j * max_obs_] = new_x[j];
+
+   // Extend Q_: zero new row (row n_obs_ in cols 0..n_obs_-1) and new col
+   // (col n_obs_ in rows 0..n_obs_-1) to clear stale data, then set diagonal.
+   {
+      const int qs = max_obs_ + 1;
+      for (int j = 0; j < n_obs_; ++j)
+         Q_[j * qs + n_obs_] = 0.0;           // new row, existing cols
+      for (int i = 0; i <= n_obs_; ++i)
+         Q_[n_obs_ * qs + i] = 0.0;           // new col (all rows incl. diagonal)
+      Q_[n_obs_ + n_obs_ * qs] = 1.0;         // diagonal
+   }
 
    n_obs_++;
    givens::update(this);
@@ -244,12 +263,20 @@ void ABO::downdate(double *z_old, double y_old)
       std::memcpy(R_inv_, scratch_d_, n_obs_ * dim_ * sizeof(double));
    }
 
-   // Delete first row of R_ via memmove (Bug 1 fix: stride max_obs_, not n_obs_-1)
+   // Delete first row of R_ (col-major, stride max_obs_)
    for (int j = 0; j < dim_; ++j)
       std::memmove(&R_[j * max_obs_], &R_[j * max_obs_ + 1], (n_obs_ - 1) * sizeof(double));
 
-   // Delete first column of R_inv_ (stride dim_, contiguous column block)
+   // Delete first column of R_inv_ (contiguous column blocks, stride dim_)
    std::memmove(R_inv_, R_inv_ + dim_, dim_ * (n_obs_ - 1) * sizeof(double));
+
+   // Delete first row of Q_ (col-major, stride max_obs_+1), then first column
+   {
+      const int q_stride = max_obs_ + 1;
+      for (int j = 0; j < n_obs_; ++j)
+         std::memmove(&Q_[j * q_stride], &Q_[j * q_stride + 1], (n_obs_ - 1) * sizeof(double));
+      std::memmove(Q_, Q_ + q_stride, (n_obs_ - 1) * q_stride * sizeof(double));
+   }
 
    // Delete first element of y_
    std::memmove(y_, y_ + 1, (n_obs_ - 1) * sizeof(double));

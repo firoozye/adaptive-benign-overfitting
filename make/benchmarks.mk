@@ -4,7 +4,7 @@ BENCH_CPPFLAGS := -Ilibs/benchmark/include
 BENCH_LDFLAGS  := -Llibs/benchmark/build/src
 BENCH_LDLIBS   := -lbenchmark -lpthread
 
-timing_test_MAIN := $(BENCH_DIR)/timing_test/timing_test_non_linear_ts.cc
+timing_test_MAIN := $(BENCH_DIR)/timing_test/timing_test_non_linear_ts.cpp
 timing_test_OBJS := $(call make-objs,$(timing_test_MAIN))
 
 # Apply include path to the actual benchmark objs (obj/timing_test/...)

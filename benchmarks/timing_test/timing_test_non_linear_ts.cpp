@@ -2,109 +2,143 @@
 #include <benchmark/benchmark.h>
 #include <Eigen/Dense>
 #include <vector>
-#include <string>
 #include <cmath>
-#include <iostream>
+#include <cstdlib>
 
 namespace
 {
 
-   // Cached inputs reused across runs
+   // Synthetic data from paper Eq.(25): x_t = 2*x_{t-1}/(1+0.8*x_{t-1}^2) + U(-1,1)
+   // Generated once and cached. No LFS CSV files needed.
    struct DataCache
    {
-      int num_rows{};
-      int num_cols{};
-      std::vector<double> y_vec;        // size = num_rows
-      std::vector<double> y_update_vec; // size = (#samples - num_rows)
-      Eigen::MatrixXd initial_matrix;   // num_rows x num_cols
-      Eigen::MatrixXd update_matrix;    // (len - num_rows) x num_cols
+      int num_rows{};  // init batch size (N)
+      int num_cols{};  // lag dimension (L)
+      std::vector<double> y_vec;         // init targets, size = num_rows
+      std::vector<double> y_update_vec;  // streaming targets
+      Eigen::MatrixXd initial_matrix;    // num_rows x num_cols (raw, standardized)
+      Eigen::MatrixXd update_matrix;     // n_its x num_cols  (raw, standardized)
    };
 
    const DataCache &getData()
    {
       static bool inited = false;
       static DataCache cache;
-      if (!inited)
+      if (inited) return cache;
+
+      const int LAG     = 7;
+      const int N       = 20;
+      const int N_ITS   = 1000;  // streaming steps in benchmark
+      const int BURNIN  = 500;
+      const int T_TOTAL = BURNIN + LAG + N + N_ITS;
+
+      std::srand(42);
+      auto unif = []() -> double {
+         return 2.0 * (static_cast<double>(std::rand()) / RAND_MAX) - 1.0;
+      };
+
+      std::vector<double> series(T_TOTAL);
+      series[0] = unif();
+      for (int t = 1; t < T_TOTAL; ++t)
       {
-         // Load CSVs once (adjust paths to your dataset)
-         std::vector<std::vector<std::string>> data_set =
-             read_csv_func("data/non_linear_ts_lags.csv");
-         std::vector<std::vector<std::string>> target_data =
-             read_csv_func("data/target_non_linear_ts.csv");
-
-         const int len_data_set = static_cast<int>(data_set.size()) - 1;
-         const int num_cols = 7;  // lags used when creating the TS
-         const int num_rows = 20; // initial batch size
-
-         std::vector<double> y_all;
-         y_all.reserve(static_cast<size_t>(len_data_set - 1));
-         for (int i = 1; i < len_data_set; ++i)
-         {
-            y_all.push_back(std::stod(target_data[i][0]));
-         }
-
-         const int num_elements = static_cast<int>(y_all.size()) - num_rows;
-
-         cache.y_vec.resize(num_rows);
-         for (int i = 0; i < num_rows; ++i)
-            cache.y_vec[i] = y_all[i];
-
-         cache.y_update_vec.resize(num_elements);
-         for (int i = 0; i < num_elements; ++i)
-            cache.y_update_vec[i] = y_all[num_rows + i];
-
-         Eigen::MatrixXd lag_mat(len_data_set, num_cols);
-         for (int i = 1; i < len_data_set; ++i)
-            for (int j = 0; j < num_cols; ++j)
-               lag_mat(i - 1, j) = std::stod(data_set[i][j]);
-
-         cache.initial_matrix = lag_mat.block(0, 0, num_rows, num_cols);
-         cache.update_matrix =
-             lag_mat.block(num_rows, 0, lag_mat.rows() - num_rows, num_cols);
-
-         cache.num_rows = num_rows;
-         cache.num_cols = num_cols;
-         inited = true;
+         double x = series[t - 1];
+         series[t] = 2.0 * x / (1.0 + 0.8 * x * x) + unif();
       }
+
+      // Discard burn-in
+      const int T_USE = T_TOTAL - BURNIN;
+      std::vector<double> s(series.begin() + BURNIN, series.end());
+
+      // Build lag matrix: NROWS = N + N_ITS rows
+      const int NROWS = T_USE - LAG;
+      Eigen::MatrixXd X_full(NROWS, LAG);
+      std::vector<double> y_full(NROWS);
+      for (int i = 0; i < NROWS; ++i)
+      {
+         for (int j = 0; j < LAG; ++j) X_full(i, j) = s[i + j];
+         y_full[i] = s[i + LAG];
+      }
+
+      // Standardize over init batch
+      std::vector<double> feat_mean(LAG, 0.0), feat_std(LAG, 1.0);
+      for (int j = 0; j < LAG; ++j)
+      {
+         for (int i = 0; i < N; ++i) feat_mean[j] += X_full(i, j);
+         feat_mean[j] /= N;
+         double var = 0.0;
+         for (int i = 0; i < N; ++i)
+         {
+            double d = X_full(i, j) - feat_mean[j];
+            var += d * d;
+         }
+         feat_std[j] = std::sqrt(var / N);
+         if (feat_std[j] < 1e-12) feat_std[j] = 1.0;
+      }
+      for (int i = 0; i < NROWS; ++i)
+         for (int j = 0; j < LAG; ++j)
+            X_full(i, j) = (X_full(i, j) - feat_mean[j]) / feat_std[j];
+
+      cache.num_rows = N;
+      cache.num_cols = LAG;
+      cache.initial_matrix = X_full.topRows(N);
+      cache.update_matrix  = X_full.middleRows(N, N_ITS);
+      cache.y_vec.assign(y_full.begin(), y_full.begin() + N);
+      cache.y_update_vec.assign(y_full.begin() + N, y_full.begin() + N + N_ITS);
+
+      inited = true;
       return cache;
    }
 
-   // One timed pass of update+pred repeated n_its times
+   // One timed pass: downdate + update + pred, repeated n_its times.
+   // Maintains a sliding window of exactly max_obs observations.
    void run_once_for_D(
        int D,
        ABO &abo,
        const DataCache &data,
        GaussianRFF &g_rff,
-       std::vector<double> &preds,
-       std::vector<double> &mse,
+       std::vector<std::vector<double>> &X_raw_ring,
+       std::vector<double> &y_ring,
+       int &ring_idx,
        std::vector<double> &X_update,
        int n_its,
-       benchmark::State &state) // <— pass state reference
+       benchmark::State &state)
    {
-      preds.clear();
-      mse.clear();
-      preds.reserve(n_its);
-      mse.reserve(n_its);
+      const int N = data.num_rows;
 
       for (int t = 0; t < n_its; ++t)
       {
          state.PauseTiming();
-         Eigen::MatrixXd X_update_old = g_rff.transform(data.update_matrix.row(t));
-         for (int i = 0; i < D; ++i)
-            X_update[i] = X_update_old(0, i);
+         Eigen::MatrixXd z_new = g_rff.transform(data.update_matrix.row(t));
+         for (int i = 0; i < D; ++i) X_update[i] = z_new(0, i);
+         double y_new = data.y_update_vec[t];
          state.ResumeTiming();
 
-         double y_new = data.y_update_vec[t];
-         double p = abo.pred(X_update.data());
-         abo.update(X_update.data(), y_new);
+         // Downdate oldest (keep window exactly at N)
+         if (abo.n_obs_ == N)
+         {
+            state.PauseTiming();
+            Eigen::MatrixXd raw_old(1, data.num_cols);
+            for (int j = 0; j < data.num_cols; ++j)
+               raw_old(0, j) = X_raw_ring[ring_idx][j];
+            Eigen::MatrixXd z_old = g_rff.transform(raw_old);
+            std::vector<double> z_old_v(D);
+            for (int j = 0; j < D; ++j) z_old_v[j] = z_old(0, j);
+            state.ResumeTiming();
+            abo.downdate(z_old_v.data(), y_ring[ring_idx]);
+         }
 
-         preds.push_back(p);
-         double err = p - y_new;
-         mse.push_back(err * err);
+         // Ring buffer update (untimed)
+         state.PauseTiming();
+         for (int j = 0; j < data.num_cols; ++j)
+            X_raw_ring[ring_idx][j] = data.update_matrix(t, j);
+         y_ring[ring_idx] = y_new;
+         ring_idx = (ring_idx + 1) % N;
+         state.ResumeTiming();
+
+         abo.pred(X_update.data());
+         abo.update(X_update.data(), y_new);
       }
 
-      benchmark::DoNotOptimize(preds.data());
-      benchmark::DoNotOptimize(mse.data());
       benchmark::ClobberMemory();
    }
 
@@ -114,40 +148,41 @@ namespace
 
 static void BM_ABO_RFF(benchmark::State &state)
 {
-   const int D = static_cast<int>(state.range(0)); // RFF dimension
-   const auto &data = getData();                   // warm inputs
-   const int num_rows = data.num_rows;
+   const int D = static_cast<int>(state.range(0));
+   const auto &data = getData();
+   const int N = data.num_rows;
+   const int d = data.num_cols;
 
    // --- Setup (outside timing) ----------------------------------------
-   const int d = data.num_cols;
-   const double kernel_var = 1.0;
-   const bool seed = true;
-
-   GaussianRFF g_rff(d, D, kernel_var, seed);
+   GaussianRFF g_rff(d, D, 1.0, /*seed=*/true);
    Eigen::MatrixXd X0 = g_rff.transform_matrix(data.initial_matrix);
 
-   // Column-major raw storage for QR_Rls constructor
-   std::vector<double> X(static_cast<size_t>(num_rows) * D);
+   std::vector<double> X_init(static_cast<size_t>(N) * D);
    for (int j = 0; j < D; ++j)
-      for (int i = 0; i < num_rows; ++i)
-         X[i + j * num_rows] = X0(i, j);
+      for (int i = 0; i < N; ++i)
+         X_init[i + j * N] = X0(i, j);
 
-   std::vector<double> y = data.y_vec;
+   std::vector<double> y_init = data.y_vec;
+   ABO abo(X_init.data(), y_init.data(), N, /*ff=*/1.0, D, N);
 
-   const int max_obs = num_rows;
-   const double ff = 1.0;
+   // Ring buffer
+   std::vector<std::vector<double>> X_raw_ring(N, std::vector<double>(d));
+   std::vector<double> y_ring(N);
+   for (int i = 0; i < N; ++i)
+   {
+      for (int j = 0; j < d; ++j) X_raw_ring[i][j] = data.initial_matrix(i, j);
+      y_ring[i] = y_init[i];
+   }
+   int ring_idx = 0;
 
-   ABO abo(X.data(), y.data(), max_obs, ff, D, num_rows);
-
-   std::vector<double> preds;
-   std::vector<double> mse;
    std::vector<double> X_update(static_cast<size_t>(D));
-   const int n_its = 1000;
 
    // --- Timed section --------------------------------------------------
    for (auto _ : state)
    {
-      run_once_for_D(D, abo, data, g_rff, preds, mse, X_update, n_its, state);
+      run_once_for_D(D, abo, data, g_rff,
+                     X_raw_ring, y_ring, ring_idx,
+                     X_update, static_cast<int>(data.y_update_vec.size()), state);
    }
 
    state.counters["D"] = D;

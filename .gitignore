@@ -5,4 +5,8 @@ obj/*.o
 # Ignore logs and temp files
 *.log
 *.tmp
-logs/
+logs/bin/
+bin/*
+obj/*
+obj/*
+obj/

@@ -6,10 +6,21 @@ include make/baselines.mk
 include make/experiments.mk
 include make/benchmarks.mk
 
-.PHONY: all experiments benchmarks libs baselines clean debug
+TEST_SRCS := tests/test_abo_smoke.cpp tests/test_abo_debug.cpp tests/test_abo_paper.cpp
+TEST_BINS := $(patsubst tests/%.cpp,$(BIN_DIR)/%,$(TEST_SRCS))
 
+$(OBJ_DIR)/%.o: tests/%.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
+
+$(BIN_DIR)/test_%: $(OBJ_DIR)/test_%.o libcore.a | $(BIN_DIR)
+	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
+
+.PHONY: all experiments benchmarks libs baselines tests clean debug
 
 all: experiments benchmarks baselines
+
+tests: $(TEST_BINS)
 
 # Convenience umbrella targets (also nice for `make experiments`)
 experiments: $(EXPERIMENT_PROGS)

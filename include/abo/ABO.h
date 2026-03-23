@@ -45,17 +45,18 @@ public:
    double get_cond_num();
 
    // Core matrices — pre-allocated to max_obs_ capacity, never reallocated
-   double *y_;      // max_obs_           target vector (scaled by ff)
-   double *R_;      // max_obs_ * dim_    col-major, fixed col stride = max_obs_
-   double *R_inv_;  // dim_  * max_obs_   col-major, fixed col stride = dim_
-   double *beta_;   // dim_               weight vector
-   double *G_;      // (max_obs_+1)^2     Givens accumulation matrix
-   double *G_e_1_;  // max_obs_+1         first column of G after downdate rotations
+   double *y_;      // max_obs_               target vector (scaled by ff)
+   double *R_;      // max_obs_ * dim_        col-major, fixed col stride = max_obs_
+   double *R_inv_;  // dim_  * max_obs_       col-major, fixed col stride = dim_
+   double *Q_;      // (max_obs_+1)^2         full orthogonal factor, col stride = max_obs_+1
+   double *beta_;   // dim_                   weight vector
+   double *G_;      // (max_obs_+1)^2         Givens accumulation matrix
+   double *G_e_1_;  // max_obs_+1             first column of G after downdate rotations
    std::vector<GivensRot> giv_rots;
 
    // Scratch buffers — eliminate all VLAs and hot-path heap allocations
    double *scratch_n_;   // max_obs_        n_obs_-length temporaries
-   double *scratch_n2_;  // max_obs_        second n_obs_-length region
+   double *scratch_n2_;  // max(max_obs_,dim_)  second n_obs_-length region (or dim_ in new-regime downdate)
    double *scratch_dim_; // dim_            dim_-length temporaries
    double *scratch_d_;   // max_obs_ * dim_ compact R copy / large temp
    double *scratch_d2_;  // max_obs_ * dim_ dgemm output (no aliasing)
