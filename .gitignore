@@ -1,5 +1,6 @@
 abo_predict
 *.o
+*.a
 obj/*.o
 
 # Ignore logs and temp files
@@ -8,5 +9,9 @@ obj/*.o
 logs/bin/
 bin/*
 obj/*
-obj/*
 obj/
+timing_test
+new_version_timing.txt
+old_version_timing.txt
+remove_o_and_exe_from_repo.md
+status.md
