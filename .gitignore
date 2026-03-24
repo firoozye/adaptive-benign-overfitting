@@ -11,6 +11,7 @@ bin/*
 obj/*
 obj/
 timing_test
+make/local.mk
 new_version_timing.txt
 old_version_timing.txt
 remove_o_and_exe_from_repo.md

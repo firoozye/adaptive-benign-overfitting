@@ -3,6 +3,10 @@ CXX       ?= g++
 CPPFLAGS  ?= -Iinclude -MMD -MP
 
 INCLUDES = -Iinclude -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/include/eigen3 -Ilibs/eigen -I/usr/lib/lapack
+
+# Per-machine overrides: create make/local.mk to override INCLUDES, LDFLAGS, LDLIBS
+-include make/local.mk
+
 CXXFLAGS  = -std=c++17 $(INCLUDES) -DHAVE_LAPACK_CONFIG_H -DLAPACK_COMPLEX_STRUCTURE \
 			-Wall -Wno-shadow \
 			-Wno-unused-parameter -Wno-sign-compare -Wno-unused-variable \
