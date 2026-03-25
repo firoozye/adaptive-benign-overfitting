@@ -6,7 +6,7 @@ include make/baselines.mk
 include make/experiments.mk
 include make/benchmarks.mk
 
-TEST_SRCS := tests/test_abo_smoke.cpp tests/test_abo_debug.cpp tests/test_abo_paper.cpp
+TEST_SRCS := tests/test_abo_smoke.cpp tests/test_abo_debug.cpp tests/test_abo_paper.cpp tests/test_sorf.cpp
 TEST_BINS := $(patsubst tests/%.cpp,$(BIN_DIR)/%,$(TEST_SRCS))
 
 $(OBJ_DIR)/%.o: tests/%.cpp

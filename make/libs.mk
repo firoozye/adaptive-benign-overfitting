@@ -6,6 +6,7 @@ CORE_SRCS := \
   src/pseudo_inverse.cpp \
   src/abo/last_row_givens.cpp \
   src/abo/gau_rff.cpp \
+  src/abo/sorf.cpp \
   src/read_csv_func.cpp
 
 CORE_OBJS := $(call make-objs,$(CORE_SRCS))
