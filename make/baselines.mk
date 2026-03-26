@@ -18,6 +18,10 @@ BASELINE_ELECT_SWKRLS_SRCS := $(EXP_DIR)/baselines/SWKRLS/electricity/swkrls_tes
 BASELINE_ELECT_SWKRLS_OBJS := $(call make-objs,$(BASELINE_ELECT_SWKRLS_SRCS))
 
 
+BASELINE_PROGS := $(BIN_DIR)/baseline_qrd_rls_eurusd $(BIN_DIR)/baseline_qrd_rls_elect \
+                  $(BIN_DIR)/baseline_k_rls_eurusd  $(BIN_DIR)/baseline_k_rls_elect \
+                  $(BIN_DIR)/swkrls_eurusd          $(BIN_DIR)/swkrls_elect
+
 $(BIN_DIR)/baseline_qrd_rls_eurusd: $(BASELINE_EURUSD_QRDRLS_OBJS) libcore_baseline.a libcore.a | $(BIN_DIR)
 	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
 

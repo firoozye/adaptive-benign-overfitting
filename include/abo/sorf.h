@@ -35,7 +35,7 @@ public:
     std::vector<std::vector<double>> chi_scales_;
     std::vector<double> bias_;  // D_ phases in [0, 2π]
 
-    SORF(int d, int D, double sigma, bool seed = false);
+    SORF(int d, int D, double sigma, int seed = -1);
     Eigen::MatrixXd transform(const Eigen::MatrixXd& x) const;
     Eigen::MatrixXd transform_matrix(const Eigen::MatrixXd& X) const;
 

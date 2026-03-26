@@ -6,13 +6,13 @@
 
 using namespace std;
 
-GaussianRFF::GaussianRFF(int d, int D, double kernel_var, bool seed)
+GaussianRFF::GaussianRFF(int d, int D, double kernel_var, int seed)
     : D(D)
 {
-    if (seed)
-    {
-        rng.seed(0); // Fixed seed for reproducibility
-    }
+    if (seed >= 0)
+        rng.seed(static_cast<unsigned>(seed));
+    else
+        rng.seed(std::random_device{}());
 
     // Initialize random distributions
     normal_distribution<double> normal_dist(0.0, kernel_var);

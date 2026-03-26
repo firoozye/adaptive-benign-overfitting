@@ -7,15 +7,15 @@ int SORF::next_pow2(int n)
     return p;
 }
 
-SORF::SORF(int d, int D, double sigma, bool seed)
+SORF::SORF(int d, int D, double sigma, int seed)
     : d_in_(d), D_(D), sigma_(sigma)
 {
     d_pad_ = next_pow2(d);
     int n_blocks = (D + d_pad_ - 1) / d_pad_;
 
     std::mt19937 rng;
-    if (seed) rng.seed(0);
-    else      rng.seed(std::random_device{}());
+    if (seed >= 0) rng.seed(static_cast<unsigned>(seed));
+    else           rng.seed(std::random_device{}());
 
     std::uniform_int_distribution<int>     sign_dist(0, 1);
     std::uniform_real_distribution<double> phase_dist(0.0, 2.0 * M_PI);
