@@ -113,11 +113,10 @@ void SWKRLS::update(const double *new_x, double new_y,
         // Not novel: apply forgetting then recompute alpha.
         // The new point lies in the RKHS span of the dictionary, so no
         // structural change is needed.
+        // Forgetting: scale past targets by ff so alpha = P*(ff*y) = ff*alpha_old.
+        // P is kept as the exact kernel-matrix inverse (no inflation).
         if (ff_ != 1.0)
-        {
-            P_      *= (1.0 / ff_);
-            y_dict_ *= std::sqrt(ff_);
-        }
+            y_dict_ *= ff_;
         alpha_ = P_ * y_dict_;
         return;
     }
@@ -134,11 +133,9 @@ void SWKRLS::update(const double *new_x, double new_y,
     }
 
     // Step 4 — Apply forgetting factor before incorporating the new sample.
+    // Past targets are down-weighted by ff; the fresh observation is not scaled.
     if (ff_ != 1.0)
-    {
-        P_      *= (1.0 / ff_);
-        y_dict_ *= std::sqrt(ff_);
-    }
+        y_dict_ *= ff_;
 
     // Step 5 — Rank-1 update of P via the matrix inversion lemma.
     // Adding a new row/col (k_new, kxx+lambda) to the kernel matrix:

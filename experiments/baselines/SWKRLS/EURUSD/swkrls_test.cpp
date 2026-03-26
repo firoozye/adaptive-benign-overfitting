@@ -57,7 +57,7 @@ int main()
     double lambda = 1e-2;
     double sigma  = 1.0;
     int    capacity = num_rows;   // sliding window size = 60
-    double ff       = 1.0;  // TODO: fix forgetting factor implementation before using ff<1
+    double ff       = 0.97;
 
     int    n_its = 12000;
 
