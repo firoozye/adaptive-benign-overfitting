@@ -1,5 +1,11 @@
 #include "abo/dd_test.h"
 
+#ifdef USE_SORF
+using RFFType = SORF;
+#else
+using RFFType = GaussianRFF;
+#endif
+
 using namespace std;
 
 void saveVectorToCSV(const std::vector<double> &vec, const std::string &filename, bool asRow = true)
@@ -98,7 +104,7 @@ int main()
       // double kernel_var = 1.0 / 2.0;
       bool seed = true;
 
-      GaussianRFF g_rff(d, D, kernel_var, seed);
+      RFFType g_rff(d, D, kernel_var, seed);
       MatrixXd X_old = g_rff.transform_matrix(initial_matrix);
       double *X = new double[num_rows * D];
 
@@ -210,12 +216,21 @@ int main()
       delete[] X;
    }
    // save as column
+#ifdef USE_SORF
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-result"
+   system("mkdir -p results/electricity/sorf");
+#pragma GCC diagnostic pop
+   saveVectorToCSV(all_mse_array, "results/electricity/sorf/dd_test_mse_ff_98.csv", false);
+   saveVectorToCSV(all_var_array, "results/electricity/sorf/dd_test_var_ff_98.csv", false);
+#else
    // saveVectorToCSV(all_mse_array, "dd_train_res_mse.csv", false);
    // saveVectorToCSV(all_var_array, "dd_train_res_var.csv", false);
    // saveVectorToCSV(all_cond_num_mean_array, "cond_num_mean.csv", false);
    // saveVectorToCSV(all_cond_num_var_array, "cond_num_var.csv", false);
    saveVectorToCSV(all_mse_array, "results/electricity/dd_test_mse_ff_98.csv", false);
    saveVectorToCSV(all_var_array, "results/electricity/dd_test_var_ff_98.csv", false);
+#endif
 
    return 0;
 };

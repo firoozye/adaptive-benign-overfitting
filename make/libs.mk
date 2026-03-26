@@ -14,6 +14,7 @@ CORE_OBJS := $(call make-objs,$(CORE_SRCS))
 CORE_SRCS_2 := \
   src/baselines/QRD_RLS/qrd_rls.cpp \
   src/baselines/KRLS_RBF/krls_rbf.cpp \
+  src/baselines/SWKRLS/swkrls.cpp \
   src/add_row_col.cpp
 
 CORE_OBJS_2 := $(call make-objs,$(CORE_SRCS_2))

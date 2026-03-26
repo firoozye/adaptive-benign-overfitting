@@ -1,5 +1,11 @@
 #include "abo/dd_test.h"
 
+#ifdef USE_SORF
+using RFFType = SORF;
+#else
+using RFFType = GaussianRFF;
+#endif
+
 using namespace std;
 
 void saveVectorToCSV(const std::vector<double> &vec, const std::string &filename, bool asRow = true)
@@ -97,7 +103,7 @@ int main()
       // double kernel_var = 1.0 / 2.0;
       bool seed = true;
 
-      GaussianRFF g_rff(d, D, kernel_var, seed);
+      RFFType g_rff(d, D, kernel_var, seed);
       MatrixXd X_old = g_rff.transform_matrix(initial_matrix);
       double *X = new double[num_rows * D];
 
@@ -202,10 +208,19 @@ int main()
       delete[] X;
    }
    // save as column
+#ifdef USE_SORF
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-result"
+   system("mkdir -p results/EURUSD/sorf");
+#pragma GCC diagnostic pop
+   saveVectorToCSV(all_mse_array, "results/EURUSD/sorf/dd_test_mse_ff_97.csv", false);
+   saveVectorToCSV(all_var_array, "results/EURUSD/sorf/dd_test_var_ff_97.csv", false);
+#else
    // saveVectorToCSV(all_mse_array, "results/EURUSD/dd_test_mse.csv", false);
    // saveVectorToCSV(all_var_array, "results/EURUSD/dd_test_var.csv", false);
    saveVectorToCSV(all_mse_array, "results/EURUSD/dd_test_mse_ff_97.csv", false);
    saveVectorToCSV(all_var_array, "results/EURUSD/dd_test_var_ff_97.csv", false);
+#endif
 
    return 0;
 };

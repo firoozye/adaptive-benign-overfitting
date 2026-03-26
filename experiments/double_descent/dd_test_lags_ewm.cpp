@@ -1,5 +1,11 @@
 #include "dd_test.h"
 
+#ifdef USE_SORF
+using RFFType = SORF;
+#else
+using RFFType = GaussianRFF;
+#endif
+
 using namespace std;
 
 void saveVectorToCSV(const std::vector<double> &vec, const std::string &filename, bool asRow = true)
@@ -93,7 +99,7 @@ int main()
       double kernel_var = 1.0;
       bool seed = true;
 
-      GaussianRFF g_rff(d, D, kernel_var, seed);
+      RFFType g_rff(d, D, kernel_var, seed);
       MatrixXd X_old = g_rff.transform_matrix(initial_matrix);
       double *X = new double[num_rows * D];
       // double X[num_rows * D];
@@ -167,8 +173,12 @@ int main()
       delete[] X;
    }
    // save as column
+#ifdef USE_SORF
+   saveVectorToCSV(all_mse_array, "dd_train_mse_sorf.csv", false);
+#else
    saveVectorToCSV(all_mse_array, "dd_train_mse.csv", false);
    // saveVectorToCSV(all_mse_array, "dd_test_mse.csv", false);
+#endif
 
    return 0;
 };
