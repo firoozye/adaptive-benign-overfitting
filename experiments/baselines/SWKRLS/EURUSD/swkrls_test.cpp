@@ -55,16 +55,27 @@ int main()
             X[i + j * num_rows] = initial_matrix(i, j);
 
     double lambda = 1e-2;
-    double sigma  = 1.0;
     int    capacity = num_rows;   // sliding window size = 60
     double ff       = 0.97;
 
     int    n_its = 12000;
 
-    // Sweep over ALD novelty thresholds
-    double ald_thresholds[] = {1e-5, 1e-4, 1e-3};
+    // Sweep sigma and ald_thresh together.
+    // sigma=1 makes RBF kernel ≈ 0 for 25-dim data (typical ||x-y|| ≈ 7),
+    // so every point looks novel. Use sigma ~ sqrt(d) = 5 as a starting point.
+    struct Config { double sigma; double ald_thresh; };
+    Config configs[] = {
+        {1.0, 1e-3},   // original (baseline — ALD never fires)
+        {5.0, 1e-3},
+        {5.0, 0.1},
+        {5.0, 0.3},
+        {5.0, 0.5},
+        {7.0, 0.1},
+        {7.0, 0.3},
+        {7.0, 0.5},
+    };
 
-    for (double ald_thresh : ald_thresholds)
+    for (auto [sigma, ald_thresh] : configs)
     {
         SWKRLS sw_krls(X, y, num_rows, num_cols, lambda, sigma,
                        capacity, ff, ald_thresh);
@@ -97,10 +108,12 @@ int main()
         }
         var /= (n_its - 1);
 
-        cout << "ald_thresh=" << ald_thresh
+        double novel_pct = 100.0 * sw_krls.n_novel() / n_its;
+        cout << "sigma=" << sigma
+             << "  ald=" << ald_thresh
              << "  MSE=" << real_mse
              << "  VAR=" << var
-             << "  avg_dict_size=" << (double)dict_size_sum / n_its
+             << "  novel%=" << novel_pct
              << endl;
     }
 

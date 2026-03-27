@@ -46,6 +46,10 @@ public:
     // Current dictionary size (0 <= dict_size() <= capacity).
     int dict_size() const { return static_cast<int>(dict_.size()); }
 
+    // Cumulative counts since construction.
+    long long n_novel()     const { return n_novel_; }
+    long long n_non_novel() const { return n_non_novel_; }
+
 private:
     int    dim_;
     int    capacity_;
@@ -53,6 +57,8 @@ private:
     double sigma_;
     double ff_;
     double ald_thresh_;
+    long long n_novel_     = 0;
+    long long n_non_novel_ = 0;
 
     std::vector<Eigen::VectorXd> dict_;  // dictionary input vectors
     Eigen::VectorXd              y_dict_; // targets for dictionary entries

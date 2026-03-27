@@ -110,6 +110,7 @@ void SWKRLS::update(const double *new_x, double new_y,
 
     if (!novel)
     {
+        ++n_non_novel_;
         // Not novel: apply forgetting then recompute alpha.
         // The new point lies in the RKHS span of the dictionary, so no
         // structural change is needed.
@@ -121,6 +122,7 @@ void SWKRLS::update(const double *new_x, double new_y,
         return;
     }
 
+    ++n_novel_;
     // Step 3 — Novel point: if dictionary is full, evict the oldest entry.
     if (m == capacity_)
     {
