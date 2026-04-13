@@ -3,7 +3,7 @@
 #include <Eigen/Dense>
 #include <vector>
 #include <cmath>
-#include <cstdlib>
+#include <iostream>
 
 namespace
 {
