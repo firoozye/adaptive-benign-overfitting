@@ -89,11 +89,11 @@ int main()
    vector<double> all_cond_num_mean_array;
    vector<double> all_cond_num_var_array;
 
-   // for (int idx_rff = 1; idx_rff < 15; idx_rff++)
-   for (int idx_rff = 2; idx_rff < 128; idx_rff++)
+   for (int idx_rff = 1; idx_rff < 15; idx_rff++)
+   //for (int idx_rff = 2; idx_rff < 128; idx_rff++)
    {
-      // int D = pow(2, idx_rff);
-      int D = idx_rff;
+      int D = pow(2, idx_rff);
+      //int D = idx_rff;
       double kernel_var = 1.0;
       // double kernel_var = 1.0 / 4.0;
       // double kernel_var = 1.0 / 2.0;
@@ -113,8 +113,8 @@ int main()
       }
 
       int max_obs = num_rows;
-      // double ff = 1.0;
-      double ff = .9;
+      double ff = 1.0;
+      //double ff = .9;
       ABO abo(X, y, max_obs, ff, D, max_obs);
 
       vector<double> preds;
@@ -125,7 +125,7 @@ int main()
 
       double X_update[D];
 
-      int n_its = 1000;
+      int n_its = 10000;
       for (int i = 0; i < n_its; i++)
       {
          MatrixXd X_update_old = g_rff.transform(update_matrix.row(i));
@@ -134,10 +134,10 @@ int main()
             X_update[i] = X_update_old(0, i);
          }
 
-         // preds.push_back(abo.pred(X_update));
+         preds.push_back(abo.pred(X_update));
          abo.update(X_update, y_update[i]);
 
-         preds.push_back(abo.pred(X_update));
+         //preds.push_back(abo.pred(X_update));
          double temp_res = pow(preds[i] - y_update[i], 2);
          mse.push_back(temp_res);
          all_mse += temp_res;

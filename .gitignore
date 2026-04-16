@@ -1,8 +1,9 @@
-abo_predict
-*.o
-obj/*.o
-
-# Ignore logs and temp files
-*.log
-*.tmp
-logs/
+obj/
+obj/
+bin/
+bin/*
+obj/*
+libcore_baseline.a
+libcore.a
+timing_test
+*.a
