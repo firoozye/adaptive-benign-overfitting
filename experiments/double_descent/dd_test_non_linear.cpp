@@ -113,8 +113,8 @@ int main()
       }
 
       int max_obs = num_rows;
-      double ff = 1.0;
-      //double ff = .9;
+      //double ff = 1.0;
+      double ff = .9;
       ABO abo(X, y, max_obs, ff, D, max_obs);
 
       vector<double> preds;
@@ -134,10 +134,10 @@ int main()
             X_update[i] = X_update_old(0, i);
          }
 
-         preds.push_back(abo.pred(X_update));
+         //preds.push_back(abo.pred(X_update));
          abo.update(X_update, y_update[i]);
 
-         //preds.push_back(abo.pred(X_update));
+         preds.push_back(abo.pred(X_update));
          double temp_res = pow(preds[i] - y_update[i], 2);
          mse.push_back(temp_res);
          all_mse += temp_res;
