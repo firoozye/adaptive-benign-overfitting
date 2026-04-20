@@ -21,15 +21,14 @@ extern "C"
 #include <vector>
 
 #include "QR_decomposition.h"
-#include "add_row_col.h"
 #include "last_row_givens.h"
 #include "logger.h"
 #include "pseudo_inverse.h"
 
 struct GivensRot
 {
-   int j1; // first column index (or row index, depending on where applied)
-   int j2; // second column index
+   int j1; // first column index in R_inv_
+   int j2; // second column index in R_inv_
    double c;
    double s;
 };
@@ -37,35 +36,34 @@ struct GivensRot
 class ABO
 {
 public:
-   // Declare destructor in header, define in cpp file
    ABO(double *X_batch, double *y_batch, int max_obs, double ff, int dim, int X_rows);
    ~ABO();
-   void batchInitialize();
+   void batchInitialize(double *x_input);
    void update(double *new_x, double &new_y);
-   void downdate();
+   void downdate(double *z_old);
    double pred(double *x);
    double get_cond_num();
-   double get_real_cond_num();
 
-   // Input data
-   double *X_; // Input matrix
-   double *y_; // Target vector
-
-   // Matrices for QR decomposition
-   double *G_;     // Givens rotation matrix
-   double *R_;     // R matrix from QR decomposition
-   double *R_inv_; // Inverse of R matrix
-   double *Q_;     // Q matrix from QR decomposition
-   double *z_;     // Intermediate vector
-   double *beta_;  // Weight vector
-   double *G_e_1_;
+   // Core matrices — pre-allocated to max_obs_ capacity, never reallocated
+   double *y_;      // max_obs_               target vector (scaled by ff)
+   double *R_;      // max_obs_ * dim_        col-major, fixed col stride = max_obs_
+   double *R_inv_;  // dim_  * max_obs_       col-major, fixed col stride = dim_
+   double *beta_;   // dim_                   weight vector
+   double *G_;      // (max_obs_+1)^2         Givens accumulation matrix
+   double *G_e_1_;  // max_obs_+1             first column of G after downdate rotations
    std::vector<GivensRot> giv_rots;
 
-   // hyperparameters
-   int max_obs_;  // Maximum number of observations
-   int r_c_size_; // Size of R and C matrices
+   // Scratch buffers — eliminate all VLAs and hot-path heap allocations
+   double *scratch_n_;   // max_obs_        n_obs_-length temporaries
+   double *scratch_n2_;  // max(max_obs_,dim_)  second n_obs_-length region (or dim_ in new-regime downdate)
+   double *scratch_dim_; // dim_            dim_-length temporaries
+   double *scratch_d_;   // max_obs_ * dim_ compact R copy / large temp
+   double *scratch_d2_;  // max_obs_ * dim_ dgemm output (no aliasing)
+
+   // Hyperparameters
+   int max_obs_;  // Maximum window size (allocation capacity)
    int n_obs_;    // Current number of observations
-   int dim_;      // Dimension of input
+   int dim_;      // Feature dimension
    double ff_;
-   double sqrt_ff_; // Sqrt Forgetting factor
+   double sqrt_ff_;
 };

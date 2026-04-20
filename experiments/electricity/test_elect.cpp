@@ -1,5 +1,11 @@
 #include "abo/dd_test.h"
 
+#ifdef USE_SORF
+using RFFType = SORF;
+#else
+using RFFType = GaussianRFF;
+#endif
+
 using namespace std;
 
 void saveVectorToCSV(const std::vector<double> &vec, const std::string &filename, bool asRow = true)
@@ -98,7 +104,7 @@ int main()
       // double kernel_var = 1.0 / 2.0;
       bool seed = true;
 
-      GaussianRFF g_rff(d, D, kernel_var, seed);
+      RFFType g_rff(d, D, kernel_var, seed);
       MatrixXd X_old = g_rff.transform_matrix(initial_matrix);
       double *X = new double[num_rows * D];
 
@@ -116,26 +122,53 @@ int main()
       // double ff = .98;
       ABO abo(X, y, max_obs, ff, D, num_rows);
 
+      // Ring buffer: stores raw (pre-RFF) features and y values for downdate
+      int N = max_obs;
+      std::vector<std::vector<double>> X_raw_ring(N, std::vector<double>(num_cols));
+      std::vector<double> y_ring(N, 0.0);
+      for (int ri = 0; ri < N; ri++)
+      {
+         for (int j = 0; j < num_cols; j++) X_raw_ring[ri][j] = initial_matrix(ri, j);
+         y_ring[ri] = y[ri];
+      }
+      int ring_idx = 0;
+
       vector<double> preds;
       vector<double> mse;
       vector<double> cond_nums;
       double all_mse = 0;
       double all_cond_nums = 0;
 
-      double X_update[D];
+      std::vector<double> X_update(D);
 
       // int n_its = 10;
       int n_its = 35100;
       for (int i = 0; i < n_its; i++)
       {
          MatrixXd X_update_old = g_rff.transform(update_matrix.row(i));
-         for (int i = 0; i < D; ++i)
+         for (int ii = 0; ii < D; ++ii)
          {
-            X_update[i] = X_update_old(0, i);
+            X_update[ii] = X_update_old(0, ii);
          }
 
-         preds.push_back(abo.pred(X_update));
-         abo.update(X_update, y_update[i]);
+         // Downdate oldest observation before pred+update
+         if (abo.n_obs_ == N)
+         {
+            MatrixXd raw_old_mat(1, num_cols);
+            for (int j = 0; j < num_cols; j++) raw_old_mat(0, j) = X_raw_ring[ring_idx][j];
+            MatrixXd z_old_mat = g_rff.transform(raw_old_mat);
+            std::vector<double> z_old_arr(D);
+            for (int j = 0; j < D; j++) z_old_arr[j] = z_old_mat(0, j);
+            abo.downdate(z_old_arr.data());
+            }
+         preds.push_back(abo.pred(X_update.data()));
+
+         // Update ring buffer with current new point
+         for (int j = 0; j < num_cols; j++) X_raw_ring[ring_idx][j] = update_matrix(i, j);
+         y_ring[ring_idx] = y_update[i];
+         ring_idx = (ring_idx + 1) % N;
+
+         abo.update(X_update.data(), y_update[i]);
          double temp_pred = preds[i];
 
          if (pow(preds[i] - y_update[i], 2) > 1000)
@@ -182,12 +215,21 @@ int main()
       delete[] X;
    }
    // save as column
+#ifdef USE_SORF
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-result"
+   system("mkdir -p results/electricity/sorf");
+#pragma GCC diagnostic pop
+   saveVectorToCSV(all_mse_array, "results/electricity/sorf/dd_test_mse_ff_98.csv", false);
+   saveVectorToCSV(all_var_array, "results/electricity/sorf/dd_test_var_ff_98.csv", false);
+#else
    // saveVectorToCSV(all_mse_array, "dd_train_res_mse.csv", false);
    // saveVectorToCSV(all_var_array, "dd_train_res_var.csv", false);
    // saveVectorToCSV(all_cond_num_mean_array, "cond_num_mean.csv", false);
    // saveVectorToCSV(all_cond_num_var_array, "cond_num_var.csv", false);
    saveVectorToCSV(all_mse_array, "results/electricity/dd_test_mse_ff_98.csv", false);
    saveVectorToCSV(all_var_array, "results/electricity/dd_test_var_ff_98.csv", false);
+#endif
 
    return 0;
 };
