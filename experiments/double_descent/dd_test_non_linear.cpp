@@ -95,11 +95,11 @@ int main()
    vector<double> all_cond_num_mean_array;
    vector<double> all_cond_num_var_array;
 
-   // for (int idx_rff = 1; idx_rff < 15; idx_rff++)
-   for (int idx_rff = 2; idx_rff < 128; idx_rff++)
+   for (int idx_rff = 1; idx_rff < 15; idx_rff++)
+   //for (int idx_rff = 2; idx_rff < 128; idx_rff++)
    {
-      // int D = pow(2, idx_rff);
-      int D = idx_rff;
+      int D = pow(2, idx_rff);
+      //int D = idx_rff;
       double kernel_var = 1.0;
       // double kernel_var = 1.0 / 4.0;
       // double kernel_var = 1.0 / 2.0;
@@ -119,7 +119,7 @@ int main()
       }
 
       int max_obs = num_rows;
-      // double ff = 1.0;
+      //double ff = 1.0;
       double ff = .9;
       ABO abo(X, y, max_obs, ff, D, max_obs);
 
@@ -141,8 +141,8 @@ int main()
       // double all_cond_nums = 0;
 
       std::vector<double> X_update(D);
-
-      int n_its = 1000;
+      double chale = 0;
+      int n_its = 10000;
       for (int i = 0; i < n_its; i++)
       {
          MatrixXd X_update_old = g_rff.transform(update_matrix.row(i));
@@ -151,7 +151,10 @@ int main()
             X_update[ii] = X_update_old(0, ii);
          }
 
+         preds.push_back(abo.pred(X_update.data()));
+
          // Downdate oldest observation before adding new one
+
          if (abo.n_obs_ == N)
          {
             MatrixXd raw_old_mat(1, num_cols);
@@ -168,8 +171,7 @@ int main()
 
          // preds.push_back(abo.pred(X_update.data()));
          abo.update(X_update.data(), y_update[i]);
-
-         preds.push_back(abo.pred(X_update.data()));
+         //preds.push_back(abo.pred(X_update.data()));
          double temp_res = pow(preds[i] - y_update[i], 2);
          mse.push_back(temp_res);
          all_mse += temp_res;

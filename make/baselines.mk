@@ -33,9 +33,7 @@ baseline_k_rls_eurusd:   $(BIN_DIR)/baseline_k_rls_eurusd
 baseline_k_rls_elect:    $(BIN_DIR)/baseline_k_rls_elect
 
 
-.PHONY: clean-baselines clean-libs
 .PHONY: clean-baselines
 clean-baselines:
 	$(RM) $(BASELINE_PROGS) $(BASELINE_EURUSD_QRDRLS_OBJS) $(BASELINE_ELECT_QRDRLS_OBJS) \
 	      $(BASELINE_EURUSD_KRLS_OBJS)  $(BASELINE_ELECT_KRLS_OBJS)
-
