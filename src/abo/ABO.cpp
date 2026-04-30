@@ -252,14 +252,12 @@ void ABO::downdate(double *z_old_in)
                   dim_, n_obs_, 1.0, R_inv_, dim_, x_T, max_obs_, 0.0, scratch_n_, 1);
 
       double s = 1.0 - cblas_ddot(n_obs_, scratch_n_, 1, G_e_1_, 1);
+      cblas_dger(CblasColMajor, dim_, n_obs_, 1.0 / s, scratch_dim_, 1, scratch_n_, 1, R_inv_, dim_);
 
       // Weight downdate: exactly match ABOOld logic
       double x_T_B = cblas_ddot(dim_, x_T, max_obs_, beta_, 1);
       for (int i = 0; i < dim_; i++)
          beta_[i] -= (1.0 / s) * (y_old_scaled - x_T_B) * scratch_dim_[i];
-
-
-
 
       // R_inv_ = R_inv_ * G_  (use scratch_d_ to avoid aliasing)
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,

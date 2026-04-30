@@ -111,21 +111,24 @@ namespace givens
          // "h is the first row of Q... h^T = z_old^T R^dagger".
          // This formula h = R_inv^T * z_old SHOULD work for both if R_inv is the pseudo-inverse.
          
-         cblas_dgemv(CblasColMajor, CblasTrans,
-                     dim, n_obs, 1.0,
-                     R_inv, dim, z_old, 1, 0.0, h, 1);
+         std::memcpy(h, z_old, dim * sizeof(double));
+         cblas_dtrsv(CblasColMajor, CblasUpper, CblasTrans, CblasNonUnit, 
+                        dim, R, abo->max_obs_, h, 1);
       }
 
-      // Step 2: Initialize h_accum to e_1.
-      // We will apply the rotations that zero out h to e_1 to get the first row of Q.
-      std::fill(abo->G_e_1_, abo->G_e_1_ + n_obs, 0.0);
-      abo->G_e_1_[0] = 1.0;
+      // 3. Place the residual in the first 'empty' slot of the h vector
+      // This completes the first row of Q (q1)
+      if (dim < n_obs) {
+         // 2. Find the norm of the 'known' part
+         double norm_sq = cblas_ddot(dim, h, 1, h, 1);
+         double rho = std::sqrt(std::max(0.0, 1.0 - norm_sq));
+         h[dim] = rho;
+         // Ensure the rest of h (up to n_obs) is zero
+         std::fill(h + dim + 1, h + n_obs, 0.0);
+      }
 
-      // Also initialize G = I for the old regime matrix multiplication
-      if (dim <= n_obs) {
-          std::fill(G, G + n_obs * n_obs, 0.0);
+      std::fill(G, G + n_obs * n_obs, 0.0);
           for (int i = 0; i < n_obs; i++) G[i * n_obs + i] = 1.0;
-      }
 
       double c, s, r;
       int one = 1;
@@ -138,12 +141,7 @@ namespace givens
          h[i]     = 0.0;
 
          // Rotate elements i-1 and i of our accumulated first row of Q
-         drot_(&one, &abo->G_e_1_[i - 1], &one, &abo->G_e_1_[i], &one, &c, &s);
-
-         if (dim <= n_obs) {
-             // Rotate columns i-1 and i of G
-             drot_(&n_obs, &G[(i - 1) * n_obs], &one, &G[i * n_obs], &one, &c, &s);
-         }
+         drot_(&n_obs, &G[(i - 1) * n_obs], &one, &G[i * n_obs], &one, &c, &s);
 
          if (dim > n_obs)
          {
@@ -166,26 +164,43 @@ namespace givens
          if (h[0] < 0)
          {
             for (int i = 0; i < n_obs * n_obs; ++i) G[i] *= -1;
-            for (int i = 0; i < n_obs; i++) abo->G_e_1_[i] *= -1;
          }
       }
 
+      for (int t = 0; t < n_obs; t++)
+         {
+            abo->G_e_1_[t] = G[t];
+         }
+
       if (dim <= n_obs)
       {
-         // Apply G^T * R, writing result back into R_.
-         for (int j = 0; j < dim; j++)
-            std::memcpy(&abo->scratch_d_[j * n_obs], &R[j * abo->max_obs_],
-                        n_obs * sizeof(double));
+         // We apply G^T * R directly.
+         // G is (n_obs x n_obs)
+         // R is (n_obs x dim) but embedded in a (max_obs x dim) buffer.
 
+         // Use scratch_d2_ as a temporary destination for the result 
+         // to avoid overwriting R while it's being read.
          cblas_dgemm(CblasColMajor, CblasTrans, CblasNoTrans,
-                     n_obs, dim, n_obs, 1.0,
-                     G, n_obs,
-                     abo->scratch_d_, n_obs,
-                     0.0, abo->scratch_d2_, n_obs);
+                     n_obs,          // M: rows of op(G) and result
+                     dim,            // N: columns of R and result
+                     n_obs,          // K: columns of op(G) and rows of R
+                     1.0, 
+                     G, n_obs,       // LDA of G is n_obs
+                     R, abo->max_obs_, // LDA of R is max_obs_ (CRITICAL)
+                     0.0, 
+                     abo->scratch_d2_, n_obs); // LDA of result is n_obs
 
+         // Now copy the result back into the R buffer, respecting the stride
          for (int j = 0; j < dim; j++)
-            std::memcpy(&R[j * abo->max_obs_], &abo->scratch_d2_[j * n_obs],
+         {
+            std::memcpy(&R[j * abo->max_obs_], 
+                        &abo->scratch_d2_[j * n_obs], 
                         n_obs * sizeof(double));
+            
+            // Zero out the deleted row (the last row of the new n_obs-1 system)
+            // or the 'residual' row created by the downdate if necessary.
+            R[j * abo->max_obs_ + (n_obs - 1)] = 0.0; 
+         }
       }
    }
 
