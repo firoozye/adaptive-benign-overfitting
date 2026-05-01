@@ -29,21 +29,22 @@ $(BIN_DIR)/EURUSD_test: $(EURUSD_test_OBJS) libcore.a | $(BIN_DIR)
 $(BIN_DIR)/elect_test: $(elect_test_OBJS) libcore.a | $(BIN_DIR)
 	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
-$(BIN_DIR)/gridsearch_test: $(gridsearch_test_OBJS) libcore.a libcore_baseline.a | $(BIN_DIR)
+$(BIN_DIR)/gridsearch_test: $(gridsearch_test_OBJS) libcore_baseline.a libcore.a | $(BIN_DIR)
 	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
-$(BIN_DIR)/gridsearch_test_best: $(gridsearch_test_best_OBJS) libcore.a libcore_baseline.a | $(BIN_DIR)
+$(BIN_DIR)/gridsearch_test_best: $(gridsearch_test_best_OBJS) libcore_baseline.a libcore.a | $(BIN_DIR)
 	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
-$(BIN_DIR)/gridsearch_eurusd_test: $(gridsearch_eurusd_test_OBJS) libcore.a libcore_baseline.a | $(BIN_DIR)
+$(BIN_DIR)/gridsearch_eurusd_test: $(gridsearch_eurusd_test_OBJS) libcore_baseline.a libcore.a | $(BIN_DIR)
 	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
-$(BIN_DIR)/gridsearch_eurusd_test_best: $(gridsearch_eurusd_test_best_OBJS) libcore.a libcore_baseline.a | $(BIN_DIR)
+$(BIN_DIR)/gridsearch_eurusd_test_best: $(gridsearch_eurusd_test_best_OBJS) libcore_baseline.a libcore.a | $(BIN_DIR)
 	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
-$(BIN_DIR)/frontier_test: $(frontier_test_OBJS) libcore.a libcore_baseline.a | $(BIN_DIR)
+$(BIN_DIR)/frontier_test: $(frontier_test_OBJS) libcore_baseline.a libcore.a | $(BIN_DIR)
 	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
+<<<<<<< HEAD
 # --- SORF variants (same sources compiled with -DUSE_SORF) ------------------
 
 $(OBJ_DIR)/double_descent/dd_test_non_linear_sorf.o: \
@@ -71,6 +72,9 @@ $(BIN_DIR)/elect_test_sorf: $(OBJ_DIR)/electricity/test_elect_sorf.o libcore.a |
 	$(CXX) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
 # --- Convenience aliases so "make dd_test" still works ----------------------
+=======
+# --- Convenience aliases ----------------------------------------------------
+>>>>>>> f2e1784
 
 .PHONY: dd_test EURUSD_test elect_test gridsearch_test gridsearch_test_best gridsearch_eurusd_test gridsearch_eurusd_test_best frontier_test
 .PHONY: dd_test_sorf EURUSD_test_sorf elect_test_sorf
@@ -87,20 +91,26 @@ dd_test_sorf:     $(BIN_DIR)/dd_test_sorf
 EURUSD_test_sorf: $(BIN_DIR)/EURUSD_test_sorf
 elect_test_sorf:  $(BIN_DIR)/elect_test_sorf
 
-# --- Umbrella list used by top-level Makefile --------------------------------
-
 EXPERIMENT_PROGS := $(BIN_DIR)/dd_test $(BIN_DIR)/EURUSD_test $(BIN_DIR)/elect_test \
                     $(BIN_DIR)/gridsearch_test $(BIN_DIR)/gridsearch_test_best \
                     $(BIN_DIR)/gridsearch_eurusd_test $(BIN_DIR)/gridsearch_eurusd_test_best \
+<<<<<<< HEAD
 					$(BIN_DIR)/frontier_test \
                     $(BIN_DIR)/dd_test_sorf $(BIN_DIR)/EURUSD_test_sorf $(BIN_DIR)/elect_test_sorf
 
 SORF_OBJS := $(OBJ_DIR)/double_descent/dd_test_non_linear_sorf.o \
              $(OBJ_DIR)/EURUSD/test_EURUSD_sorf.o \
              $(OBJ_DIR)/electricity/test_elect_sorf.o
+=======
+                    $(BIN_DIR)/frontier_test
+>>>>>>> f2e1784
 
 .PHONY: clean-experiments
 clean-experiments:
 	$(RM) $(EXPERIMENT_PROGS) $(dd_test_OBJS) $(EURUSD_test_OBJS) $(elect_test_OBJS) $(gridsearch_test_OBJS) \
+<<<<<<< HEAD
 	$(gridsearch_test_best_OBJS) $(gridsearch_eurusd_test_OBJS) $(gridsearch_eurusd_test_best_OBJS) $(frontier_test_OBJS) \
 	$(SORF_OBJS)
+=======
+	$(gridsearch_test_best_OBJS) $(gridsearch_eurusd_test_OBJS) $(gridsearch_eurusd_test_best_OBJS) $(frontier_test_OBJS)
+>>>>>>> f2e1784

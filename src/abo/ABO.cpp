@@ -14,7 +14,6 @@ ABO::~ABO()
    delete[] y_;
    delete[] R_;
    delete[] R_inv_;
-   delete[] Q_;
    delete[] beta_;
    delete[] G_e_1_;
    delete[] G_;
@@ -41,7 +40,6 @@ ABO::ABO(double *x_input, double *y_input, int max_obs, double ff, int dim, int 
    y_          = new double[max_obs_]();
    R_          = new double[max_obs_ * dim_]();
    R_inv_      = new double[dim_  * max_obs_]();
-   Q_          = new double[(max_obs_ + 1) * (max_obs_ + 1)]();
    beta_       = new double[dim_]();
    G_e_1_      = new double[max_obs_ + 1];
    G_          = new double[(max_obs_ + 1) * (max_obs_ + 1)]();
@@ -53,6 +51,14 @@ ABO::ABO(double *x_input, double *y_input, int max_obs, double ff, int dim, int 
    scratch_d2_ = new double[max_obs_ * dim_]();
 
    std::memcpy(y_, y_input, n_obs_ * sizeof(double));
+
+   if (dim_ <= max_obs_)
+   {
+      std::cerr << "[ABO] WARNING: Underparameterized regime (D=" << dim_
+                << " <= W=" << max_obs_ << "). Q-less downdate is only mathematically exact "
+                << "in the overparameterized regime (D > W)." << std::endl;
+   }
+
    batchInitialize(x_input);
 }
 
@@ -77,11 +83,6 @@ void ABO::batchInitialize(double *x_input)
    // Copy R_temp (stride n_obs_) into R_ (stride max_obs_) — key stride difference
    for (int j = 0; j < dim_; j++)
       std::memcpy(&R_[j * max_obs_], &R_temp[j * n_obs_], n_obs_ * sizeof(double));
-
-   // Copy Q_local (stride n_obs_) into Q_ (stride max_obs_+1)
-   const int q_stride = max_obs_ + 1;
-   for (int j = 0; j < n_obs_; j++)
-      std::memcpy(&Q_[j * q_stride], &Q_local[j * n_obs_], n_obs_ * sizeof(double));
 
    // Compute pseudo-inverse of R_temp into R_inv_ (stride dim_)
    pinv(R_temp, R_inv_, n_obs_, dim_);
@@ -120,7 +121,7 @@ void ABO::update(double *new_x, double &new_y)
                dim_, n_obs_, 1.0, R_inv_, dim_, new_x, 1, 0.0, scratch_n_, 1);
 
    // temp = R_ * new_x   -> scratch_n2_ (n_obs_-length), lda = max_obs_
-   cblas_dgemv(CblasColMajor, CblasNoTrans,
+   cblas_dgemv(CblasNoTrans, CblasNoTrans,
                n_obs_, dim_, 1.0, R_, max_obs_, new_x, 1, 0.0, scratch_n2_, 1);
 
    // c = new_x - R_inv_ * (R_ * new_x)  -> scratch_dim_ (dim_-length)
@@ -163,27 +164,30 @@ void ABO::update(double *new_x, double &new_y)
    for (int j = 0; j < dim_; ++j)
       R_[n_obs_ + j * max_obs_] = new_x[j];
 
-   // Extend Q_: zero new row (row n_obs_ in cols 0..n_obs_-1) and new col
-   // (col n_obs_ in rows 0..n_obs_-1) to clear stale data, then set diagonal.
-   {
-      const int qs = max_obs_ + 1;
-      for (int j = 0; j < n_obs_; ++j)
-         Q_[j * qs + n_obs_] = 0.0;           // new row, existing cols
-      for (int i = 0; i <= n_obs_; ++i)
-         Q_[n_obs_ * qs + i] = 0.0;           // new col (all rows incl. diagonal)
-      Q_[n_obs_ + n_obs_ * qs] = 1.0;         // diagonal
-   }
-
    n_obs_++;
    givens::update(this);
 }
 
-void ABO::downdate(double *z_old, double y_old)
+void ABO::downdate(double *z_old_in)
 {
+   // Use a temporary copy of z_old to avoid modifying the caller's ring buffer
+   double *z_old = scratch_dim_; // Reuse scratch_dim_ (size dim_)
+   std::memcpy(z_old, z_old_in, dim_ * sizeof(double));
+
+   // Scale z_old to match the current scaling of the R matrix
+   // The oldest observation has been scaled by sqrt_ff_ (n_obs_ - 1) times.
+   if (ff_ != 1.0)
+   {
+      double scale = std::pow(ff_, (n_obs_ - 1) / 2.0);
+      for (int i = 0; i < dim_; i++)
+         z_old[i] *= scale;
+   }
+
    // Givens rotations to prepare G, G_e_1_, and (in new regime) update R and record giv_rots
    givens::downdate(this, z_old);
 
    double *x_T = R_;  // pointer to first row; stride between columns is max_obs_
+   double y_old_scaled = y_[0]; // use the already-scaled y value
 
    if (n_obs_ < dim_)
    {
@@ -250,10 +254,10 @@ void ABO::downdate(double *z_old, double y_old)
       double s = 1.0 - cblas_ddot(n_obs_, scratch_n_, 1, G_e_1_, 1);
       cblas_dger(CblasColMajor, dim_, n_obs_, 1.0 / s, scratch_dim_, 1, scratch_n_, 1, R_inv_, dim_);
 
-      // Weight downdate
+      // Weight downdate: exactly match ABOOld logic
       double x_T_B = cblas_ddot(dim_, x_T, max_obs_, beta_, 1);
       for (int i = 0; i < dim_; i++)
-         beta_[i] -= (1.0 / s) * (y_old - x_T_B) * scratch_dim_[i];
+         beta_[i] -= (1.0 / s) * (y_old_scaled - x_T_B) * scratch_dim_[i];
 
       // R_inv_ = R_inv_ * G_  (use scratch_d_ to avoid aliasing)
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans,
@@ -269,14 +273,6 @@ void ABO::downdate(double *z_old, double y_old)
 
    // Delete first column of R_inv_ (contiguous column blocks, stride dim_)
    std::memmove(R_inv_, R_inv_ + dim_, dim_ * (n_obs_ - 1) * sizeof(double));
-
-   // Delete first row of Q_ (col-major, stride max_obs_+1), then first column
-   {
-      const int q_stride = max_obs_ + 1;
-      for (int j = 0; j < n_obs_; ++j)
-         std::memmove(&Q_[j * q_stride], &Q_[j * q_stride + 1], (n_obs_ - 1) * sizeof(double));
-      std::memmove(Q_, Q_ + q_stride, (n_obs_ - 1) * q_stride * sizeof(double));
-   }
 
    // Delete first element of y_
    std::memmove(y_, y_ + 1, (n_obs_ - 1) * sizeof(double));

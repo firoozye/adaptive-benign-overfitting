@@ -40,7 +40,7 @@ public:
    ~ABO();
    void batchInitialize(double *x_input);
    void update(double *new_x, double &new_y);
-   void downdate(double *z_old, double y_old);
+   void downdate(double *z_old);
    double pred(double *x);
    double get_cond_num();
 
@@ -48,7 +48,6 @@ public:
    double *y_;      // max_obs_               target vector (scaled by ff)
    double *R_;      // max_obs_ * dim_        col-major, fixed col stride = max_obs_
    double *R_inv_;  // dim_  * max_obs_       col-major, fixed col stride = dim_
-   double *Q_;      // (max_obs_+1)^2         full orthogonal factor, col stride = max_obs_+1
    double *beta_;   // dim_                   weight vector
    double *G_;      // (max_obs_+1)^2         Givens accumulation matrix
    double *G_e_1_;  // max_obs_+1             first column of G after downdate rotations
