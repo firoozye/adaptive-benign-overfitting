@@ -152,8 +152,7 @@ int main()
             MatrixXd z_old_mat = g_rff.transform(raw_old_mat);
             std::vector<double> z_old_arr(D);
             for (int j = 0; j < D; j++) z_old_arr[j] = z_old_mat(0, j);
-<<<<<<< HEAD
-            abo.downdate(z_old_arr.data(), y_ring[ring_idx]);
+            abo.downdate(z_old_arr.data());
          }
 
          // Update ring buffer with current new point
@@ -161,15 +160,6 @@ int main()
          y_ring[ring_idx] = y_update[i];
          ring_idx = (ring_idx + 1) % N;
 
-=======
-            abo.downdate(z_old_arr.data());
-            }
-         // Update ring buffer with current new point
-         for (int j = 0; j < num_cols; j++) X_raw_ring[ring_idx][j] = update_matrix(i, j);
-         y_ring[ring_idx] = y_update[i];
-         ring_idx = (ring_idx + 1) % N;
-
->>>>>>> f2e1784
          abo.update(X_update.data(), y_update[i]);
 
          preds.push_back(abo.pred(X_update.data()));

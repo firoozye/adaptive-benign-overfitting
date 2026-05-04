@@ -1,30 +1,21 @@
-<<<<<<< HEAD
-abo_predict
+obj/
+bin/
 *.o
 *.a
 obj/*.o
+bin/*
+obj/*
 
 # Ignore logs and temp files
 *.log
 *.tmp
 logs/bin/
-bin/*
-obj/*
-obj/
 timing_test
 make/local.mk
 new_version_timing.txt
 old_version_timing.txt
 remove_o_and_exe_from_repo.md
 status.md
-=======
-obj/
-obj/
-bin/
-bin/*
-obj/*
+
 libcore_baseline.a
 libcore.a
-timing_test
-*.a
->>>>>>> f2e1784

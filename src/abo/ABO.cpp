@@ -121,7 +121,7 @@ void ABO::update(double *new_x, double &new_y)
                dim_, n_obs_, 1.0, R_inv_, dim_, new_x, 1, 0.0, scratch_n_, 1);
 
    // temp = R_ * new_x   -> scratch_n2_ (n_obs_-length), lda = max_obs_
-   cblas_dgemv(CblasNoTrans, CblasNoTrans,
+   cblas_dgemv(CblasColMajor, CblasNoTrans,
                n_obs_, dim_, 1.0, R_, max_obs_, new_x, 1, 0.0, scratch_n2_, 1);
 
    // c = new_x - R_inv_ * (R_ * new_x)  -> scratch_dim_ (dim_-length)

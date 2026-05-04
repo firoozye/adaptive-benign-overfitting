@@ -167,7 +167,7 @@ static FoldResult run_fold_ABO(MatrixXd &initial_matrix,
             MatrixXd z_old_mat = g_rff->transform(raw_old_mat);
             std::vector<double> z_old_arr(D);
             for (int j = 0; j < D; j++) z_old_arr[j] = z_old_mat(0, j);
-            abo->downdate(z_old_arr.data(), y_ring[ring_idx]);
+            abo->downdate(z_old_arr.data());
         }
 
         double pred = abo->pred(x_rff.data());

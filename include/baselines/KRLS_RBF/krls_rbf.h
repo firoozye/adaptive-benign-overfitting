@@ -3,8 +3,19 @@
 
 #include <cstddef>
 #include <Eigen/Dense>
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 #include <cblas.h>
 #include <lapacke.h>
+
+#ifdef __cplusplus
+}
+#endif
+
 #include "pseudo_inverse.h"
 #include "add_row_col.h"
 

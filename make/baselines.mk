@@ -55,10 +55,5 @@ swkrls_elect:            $(BIN_DIR)/swkrls_elect
 .PHONY: clean-baselines
 clean-baselines:
 	$(RM) $(BASELINE_PROGS) $(BASELINE_EURUSD_QRDRLS_OBJS) $(BASELINE_ELECT_QRDRLS_OBJS) \
-<<<<<<< HEAD
 	      $(BASELINE_EURUSD_KRLS_OBJS)  $(BASELINE_ELECT_KRLS_OBJS) \
 	      $(BASELINE_EURUSD_SWKRLS_OBJS) $(BASELINE_ELECT_SWKRLS_OBJS)
-
-=======
-	      $(BASELINE_EURUSD_KRLS_OBJS)  $(BASELINE_ELECT_KRLS_OBJS)
->>>>>>> f2e1784

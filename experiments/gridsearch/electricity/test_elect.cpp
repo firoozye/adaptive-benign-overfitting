@@ -323,7 +323,7 @@ ValMetrics cross_val(int num_rows, int num_cols, double sigma, int k_fold, Model
             MatrixXd z_old_mat = g_rff->transform(raw_old_mat);
             std::vector<double> z_old_arr(D);
             for (int j = 0; j < D; j++) z_old_arr[j] = z_old_mat(0, j);
-            abo->downdate(z_old_arr.data(), y_ring[ring_idx]);
+            abo->downdate(z_old_arr.data());
          }
 
          double pred = abo->pred(X_update.data());
