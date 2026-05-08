@@ -19,3 +19,4 @@ status.md
 
 libcore_baseline.a
 libcore.a
+libs/lapack/

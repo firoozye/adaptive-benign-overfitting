@@ -168,14 +168,14 @@ int main()
 
          abo.update(X_update.data(), y_update[i]);
 
-         // preds.push_back(qr_rls.pred(X_update));
          double temp_res = pow(preds[i] - y_update[i], 2);
          mse.push_back(temp_res);
          all_mse += temp_res;
+      }
 
-         // double temp_cond_num = qr_rls.get_cond_num();
-         // cond_nums.push_back(temp_cond_num);
-         // all_cond_nums += temp_cond_num;
+      if (D == 128) {
+         saveVectorToCSV(preds, "results/EURUSD/cpp_preds_128.csv", false);
+         cout << "Saved C++ predictions for D=128 to results/EURUSD/cpp_preds_128.csv" << endl;
       }
 
       double var = 0;

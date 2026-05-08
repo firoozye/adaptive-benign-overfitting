@@ -171,7 +171,7 @@ int main()
                 MatrixXd z_old = g_rff.transform(raw_old);
                 std::vector<double> z_old_v(D);
                 for (int j = 0; j < D; ++j) z_old_v[j] = z_old(0, j);
-                abo.downdate(z_old_v.data(), y_ring[ring_idx]);
+                abo.downdate(z_old_v.data());
             }
 
             // Update ring buffer

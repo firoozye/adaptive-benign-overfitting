@@ -293,8 +293,9 @@ int main()
                     for (int j = 0; j < LAG; ++j) raw_old(0,j) = X_raw_ring[ring_idx][j];
                     Eigen::MatrixXd z_old = sorf.transform(raw_old);
                     std::vector<double> z_old_v(D);
-                    for (int j = 0; j < D; ++j) z_old_v[j] = z_old(0,j);
-                    abo.downdate(z_old_v.data(), y_ring[ring_idx]);
+                    for (int j = 0; j < D; ++j) z_old_v[j] = z_old(0, j);
+                    abo.downdate(z_old_v.data());
+
                 }
                 for (int j = 0; j < LAG; ++j) X_raw_ring[ring_idx][j] = X_stream(i,j);
                 y_ring[ring_idx] = y_true;

@@ -71,7 +71,7 @@ int main()
             MatrixXd z_old = g_rff.transform(raw);
             std::vector<double> zo(D);
             for (int j = 0; j < D; j++) zo[j] = z_old(0,j);
-            abo.downdate(zo.data(), yring[ridx]);
+            abo.downdate(zo.data());
             std::cout << "  after downdate: |beta|=" << beta_norm(abo) << " n_obs=" << abo.n_obs_ << "\n";
         }
 

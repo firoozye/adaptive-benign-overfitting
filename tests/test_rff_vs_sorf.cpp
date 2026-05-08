@@ -146,7 +146,7 @@ static std::pair<double,double> run_one(
             MatrixXd raw(1, LAG);
             for (int j = 0; j < LAG; ++j) raw(0, j) = X_raw_ring[ring_idx][j];
             std::vector<double> z_old = tfm_mat(raw);
-            abo.downdate(z_old.data(), y_ring[ring_idx]);
+            abo.downdate(z_old.data());
         }
 
         for (int j = 0; j < LAG; ++j) X_raw_ring[ring_idx][j] = X_stream(i, j);
